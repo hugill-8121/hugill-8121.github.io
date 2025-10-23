@@ -3,181 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>云风青的技术博客</title>
+    <title>这里是云风青的blog</title>
     <link rel="stylesheet" href="./css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
-    <style>
-        /* 基础样式补充 */
-        .blog-card {
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 1rem;
-            margin: 0.5rem;
-            min-width: 280px;
-            max-width: 350px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            transition: transform 0.2s;
-        }
-        .blog-card:hover {
-            transform: translateY(-3px);
-        }
-        .card-title {
-            font-size: 1.2rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            color: #111827;
-        }
-        .card-tags {
-            margin-bottom: 0.5rem;
-        }
-        .card-tag {
-            display: inline-block;
-            background: #f3f4f6;
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            margin-right: 0.3rem;
-            color: #4b5563;
-        }
-        .cards-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 1rem;
-            justify-content: center;
-        }
-        .category-section {
-            margin: 2rem 0;
-        }
-        .category-title {
-            color: #1e40af;
-            border-bottom: 2px solid #3b82f6;
-            padding-bottom: 0.5rem;
-            margin-bottom: 1rem;
-        }
-        .login-container {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            margin-top: 1rem;
-        }
-        .avatar-btn {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            overflow: hidden;
-            cursor: pointer;
-            border: 2px solid #e5e7eb;
-        }
-        .avatar-img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-        .login-menu {
-            position: absolute;
-            top: 60px;
-            right: 20px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            padding: 0.5rem 0;
-            display: none;
-            min-width: 180px;
-        }
-        .login-menu.show {
-            display: block;
-        }
-        .menu-item {
-            padding: 0.5rem 1rem;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        .menu-item:hover {
-            background: #f3f4f6;
-        }
-        .menu-item.disabled {
-            color: #9ca3af;
-            cursor: not-allowed;
-        }
-        .menu-divider {
-            height: 1px;
-            background: #e5e7eb;
-            margin: 0.5rem 0;
-        }
-        .token-input {
-            width: 100%;
-            padding: 0.5rem;
-            margin: 0.5rem 0;
-            border: 1px solid #d1d5db;
-            border-radius: 4px;
-        }
-        .login-btn {
-            width: 100%;
-            padding: 0.5rem;
-            background: #3b82f6;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        .loading {
-            text-align: center;
-            padding: 2rem;
-            color: #6b7280;
-        }
-        .tag-cloud {
-            margin: 2rem 0;
-            text-align: center;
-        }
-        .tag {
-            display: inline-block;
-            padding: 0.5rem 1rem;
-            margin: 0.3rem;
-            background: #f3f4f6;
-            border-radius: 20px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .tag.active {
-            background: #3b82f6;
-            color: white;
-        }
-        .api-status-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 100;
-        }
-        .modal-content {
-            background: white;
-            padding: 1.5rem;
-            border-radius: 8px;
-            width: 90%;
-            max-width: 500px;
-        }
-        .info-item {
-            margin: 0.8rem 0;
-            padding: 0.3rem 0;
-            border-bottom: 1px dashed #e5e7eb;
-        }
-        .close-modal {
-            margin-top: 1rem;
-            padding: 0.5rem 1rem;
-            background: #3b82f6;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-    </style>
 </head>
 <body>
     <!-- 博客配置 -->
@@ -221,21 +49,6 @@
         </div>
     </header>
 
-    <!-- 调试信息区域 -->
-    <div id="debug-info" style="display: block; margin: 1rem 0; padding: 1rem; background: #f8f9fa; border-radius: 4px; font-size: 0.9rem; max-height: 200px; overflow-y: auto;">
-        <h4 style="margin-top: 0; color: #dc3545;">调试信息：</h4>
-        <pre id="debug-log"></pre>
-    </div>
-
-    <div class="tag-cloud">
-        <h2>标签云</h2>
-        <div class="tags-container" id="tags-container"></div>
-    </div>
-
-    <div class="loading" id="loading">正在加载博客内容...</div>
-    <div id="blog-container" style="display: none;"></div>
-    <div class="no-results" id="no-results" style="display: none;">没有找到匹配标签的文章</div>
-
     <!-- API状态弹窗 -->
     <div class="api-status-modal" id="api-status-modal">
         <div class="modal-content">
@@ -268,57 +81,32 @@
         </div>
     </div>
 
+    <div class="tag-cloud">
+        <h2>标签云</h2>
+        <div class="tags-container" id="tags-container"></div>
+    </div>
+
+    <div class="loading" id="loading">正在加载博客内容...</div>
+    <div id="blog-container" style="display: none;"></div>
+    <div class="no-results" id="no-results" style="display: none;">没有找到匹配标签的文章</div>
+
+    <!-- 引入JavaScript模块 -->
     <script type="module" src="./js/github-api.js"></script>
     <script type="module">
         import { 
-            fetchFileCommitsViaGraphQL, 
+            getFileCommits, 
             getUserInfo, 
             getRateLimit 
         } from './js/github-api.js';
 
-        // 核心配置：自动解析或手动配置GitHub信息
-        let config = {};
-        try {
-            // 1. 从当前URL解析（GitHub Pages格式：用户名.github.io）
-            const hostname = window.location.hostname;
-            const githubPagesRegex = /^([a-zA-Z0-9_-]+)\.github\.io$/;
-            const match = hostname.match(githubPagesRegex);
+        // 配置
+        const config = {
+            owner: 'your-github-username',
+            repo: 'your-repo-name',
+            branch: 'main'
+        };
 
-            if (match && match[1]) {
-                // 解析成功：使用URL中的信息
-                config = {
-                    owner: match[1],
-                    repo: `${match[1]}.github.io`,
-                    branch: "main"
-                };
-                logDebug(`✅ 从URL解析配置成功: ${JSON.stringify(config)}`, "success");
-            } else {
-                // 2. 非GitHub Pages环境，使用手动配置
-                config = {
-                    owner: "hugill-8121",       // 替换为你的GitHub用户名
-                    repo: "hugill-8121.github.io", // 替换为你的仓库名
-                    branch: "main"
-                };
-                logDebug(`ℹ️ 非GitHub Pages环境，使用手动配置: ${JSON.stringify(config)}`, "info");
-            }
-
-            // 3. 验证配置是否有效（防止占位符）
-            if (config.owner.includes("your-github-username") || config.repo.includes("your-repo-name")) {
-                throw new Error("配置中存在默认占位符，请替换为实际值！");
-            }
-
-        } catch (err) {
-            // 4. 解析失败时强制使用正确配置
-            config = {
-                owner: "hugill-8121",
-                repo: "hugill-8121.github.io",
-                branch: "main"
-            };
-            logDebug(`❌ URL解析失败，强制使用兜底配置: ${JSON.stringify(config)}，错误: ${err.message}`, "error");
-        }
-        logDebug(`🎯 最终生效配置: ${JSON.stringify(config)}`, "success");
-
-        // 存储博客数据
+        // 存储博客数据（全局变量）
         let allBlogs = [];
         let allTags = new Set();
 
@@ -329,8 +117,6 @@
         const loadingEl = document.getElementById('loading');
         const blogTitle = document.getElementById('blog-title');
         const blogIntro = document.getElementById('blog-intro');
-        const debugInfo = document.getElementById('debug-info');
-        const debugLog = document.getElementById('debug-log');
 
         // 登录相关DOM
         const avatarBtn = document.getElementById('avatar-btn');
@@ -362,134 +148,102 @@
         // 初始化
         async function init() {
             loadBlogSettings();
-            logDebug('初始化开始...');
-            await loadBlogData();
-            checkLoginStatus();
+            await loadBlogData(); // 先加载博客数据（从缓存或远程）
+            checkLoginStatus();   // 再检查登录状态
             bindEvents();
         }
 
-        // 加载博客配置
+        // 加载博客配置（标题和介绍）
         function loadBlogSettings() {
             try {
                 const settingsEl = document.getElementById('blog-settings');
                 const settings = JSON.parse(settingsEl.textContent);
                 if (settings.title) blogTitle.textContent = settings.title;
                 if (settings.introduction) blogIntro.textContent = settings.introduction;
-                logDebug('博客配置加载成功: ' + JSON.stringify(settings));
             } catch (err) {
-                logDebug('加载博客配置失败: ' + err.message, 'error');
+                console.warn('加载博客配置失败，使用默认值:', err);
             }
         }
 
-        // 记录调试信息
-        function logDebug(message, level = 'info') {
-            const time = new Date().toLocaleTimeString();
-            const levels = {
-                info: '🔵',
-                warn: '🟡',
-                error: '🔴',
-                success: '🟢'
-            };
-            const prefix = levels[level] || '⚪';
-            debugLog.textContent += `[${time}] ${prefix} ${message}\n`;
-            debugLog.scrollTop = debugLog.scrollHeight;
-        }
-
-        // 加载博客数据
+        // 加载博客数据（优先从缓存加载，再尝试刷新）
         async function loadBlogData() {
             try {
-                // 1. 加载博客配置文件
-                logDebug('开始加载blog-config.json...');
-                const response = await fetch('blog-config.json');
-                if (!response.ok) {
-                    throw new Error(`blog-config.json加载失败，状态码: ${response.status}`);
-                }
-                const blogConfig = await response.json();
-                logDebug(`blog-config.json加载成功，包含${Object.keys(blogConfig).length}个分类`);
-
-                // 2. 尝试从缓存加载
+                // 1. 先尝试从本地缓存加载
                 const cachedBlogs = localStorage.getItem('cachedBlogs');
-                if (cachedBlogs) {
+                const cachedTags = localStorage.getItem('cachedTags');
+                
+                if (cachedBlogs && cachedTags) {
                     allBlogs = JSON.parse(cachedBlogs);
-                    logDebug(`从缓存加载了${allBlogs.length}篇博客数据`);
+                    allTags = new Set(JSON.parse(cachedTags));
+                    renderTags();
+                    renderBlogs();
+                    blogContainer.style.display = 'block';
                 }
 
-                // 3. 提取所有文件路径
-                const filePaths = [];
-                for (const categoryName of Object.keys(blogConfig)) {
-                    for (const article of blogConfig[categoryName]) {
-                        filePaths.push(article.path);
-                    }
-                }
-                logDebug(`共需要查询${filePaths.length}个文件的提交信息`);
-
-                // 4. 使用GraphQL批量查询
-                const token = localStorage.getItem('githubToken');
-                const commitMap = await fetchFileCommitsViaGraphQL(
-                    config.owner,
-                    config.repo,
-                    config.branch,
-                    filePaths,
-                    token
-                );
-                logDebug(`成功获取${Object.keys(commitMap).length}个文件的提交信息`);
-
-                // 5. 处理博客数据
-                processBlogData(blogConfig, commitMap);
+                // 2. 无论是否有缓存，都尝试从远程刷新（使用当前登录状态的token）
+                const response = await fetch('blog-config.json');
+                if (!response.ok) throw new Error('配置文件加载失败');
+                
+                const blogConfig = await response.json();
+                await refreshBlogData(blogConfig); // 刷新并更新数据
 
                 loadingEl.style.display = 'none';
-                blogContainer.style.display = 'block';
 
             } catch (error) {
-                logDebug('加载博客数据失败: ' + error.message, 'error');
-                loadingEl.innerHTML = `<p style="color: red;">加载失败: ${error.message}</p>`;
+                console.error('加载博客数据失败:', error);
+                // 如果缓存存在则显示缓存数据，否则显示错误
                 if (allBlogs.length > 0) {
                     loadingEl.style.display = 'none';
                     blogContainer.style.display = 'block';
-                    renderTags();
-                    renderBlogs();
+                } else {
+                    loadingEl.innerHTML = `<p style="color: red;">加载失败: ${error.message}</p>`;
                 }
             }
         }
 
-        // 处理博客数据
-        function processBlogData(blogConfig, commitMap) {
+        // 刷新博客数据（根据登录状态获取最新信息）
+        async function refreshBlogData(blogConfig) {
             const newBlogs = [];
             const newTags = new Set();
-
-            logDebug('开始处理博客数据', 'info');
-            logDebug(`commitMap 包含 ${Object.keys(commitMap).length} 条记录`, 'info');
-            
-            // 打印commitMap内容
-            logDebug('commitMap 详细数据:', 'info');
-            Object.entries(commitMap).forEach(([path, info]) => {
-                logDebug(`  ${path}: ${JSON.stringify(info)}`, 'info');
-            });
+            const token = localStorage.getItem('githubToken'); // 使用当前登录状态的token
 
             for (const categoryName of Object.keys(blogConfig)) {
-                logDebug(`处理分类: ${categoryName}`, 'info');
-                
                 for (const article of blogConfig[categoryName]) {
-                    if (!commitMap.hasOwnProperty(article.path)) {
-                        logDebug(`警告: 文章路径 ${article.path} 不在commitMap中`, 'warn');
+                    // 保留缓存中的数据（如果存在）
+                    const cachedBlog = allBlogs.find(b => b.path === article.path);
+                    let lastModified = cachedBlog?.lastModified || '未知时间';
+                    let commitMessage = cachedBlog?.commitMessage || '无提交信息';
+
+                    try {
+                        // 尝试获取最新的提交信息
+                        const commits = await getFileCommits(
+                            config.owner, 
+                            config.repo, 
+                            article.path, 
+                            config.branch, 
+                            token
+                        );
+                        
+                        if (commits.length > 0) {
+                            const date = new Date(commits[0].commit.committer.date);
+                            lastModified = date.toLocaleString('zh-CN', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            });
+                            commitMessage = commits[0].commit.message || '无提交信息';
+                        }
+                    } catch (err) {
+                        console.warn(`获取${article.path}的最新信息失败，使用缓存数据:`, err);
                     }
-                    
-                    const commitInfo = commitMap[article.path] || {
-                        lastModified: '未知时间',
-                        commitAuthor: '未知作者',
-                        commitMessage: '无提交信息'
-                    };
-                    logDebug(
-                        `处理文章 ${article.alias}: 时间=${commitInfo.lastModified}, 作者=${commitInfo.commitAuthor}, 提交信息=${commitInfo.commitMessage}`,
-                        commitInfo.lastModified === '未知时间' ? 'warn' : 'success'
-                    );
                     
                     const articleWithMeta = {
                         ...article,
                         category: categoryName,
-                        lastModified: commitInfo.lastModified,
-                        commitAuthor: commitInfo.commitAuthor,
-                        commitMessage: commitInfo.commitMessage
+                        lastModified: lastModified,
+                        commitMessage: commitMessage // 新增提交信息
                     };
                     
                     newBlogs.push(articleWithMeta);
@@ -497,12 +251,13 @@
                 }
             }
 
+            // 更新数据并缓存
             allBlogs = newBlogs;
             allTags = newTags;
             localStorage.setItem('cachedBlogs', JSON.stringify(allBlogs));
             localStorage.setItem('cachedTags', JSON.stringify(Array.from(allTags)));
-            logDebug(`数据处理完成，共${allBlogs.length}篇博客`, 'success');
 
+            // 重新渲染
             renderTags();
             renderBlogs();
         }
@@ -536,7 +291,7 @@
             });
         }
 
-        // 渲染博客卡片
+        // 渲染博客卡片（显示提交信息）
         function renderBlogs(filterTag = null) {
             blogContainer.innerHTML = '';
             
@@ -581,17 +336,15 @@
             });
         }
 
-        // 创建单个博客卡片（修复换行显示）
+        // 创建单个博客卡片（包含提交信息）
         function createBlogCard(article) {
             const card = document.createElement('div');
             card.className = 'blog-card';
             
-            // 文章标题
             const cardTitle = document.createElement('div');
             cardTitle.className = 'card-title';
             cardTitle.textContent = article.alias;
             
-            // 标签
             const cardTags = document.createElement('div');
             cardTags.className = 'card-tags';
             
@@ -602,38 +355,17 @@
                 cardTags.appendChild(tagEl);
             });
             
-            // 提交信息（限制长度）
-            const shortMessage = article.commitMessage.length > 40 
-                ? article.commitMessage.substring(0, 40) + '...' 
+            // 提交信息（限制显示长度）
+            const shortMessage = article.commitMessage.length > 30 
+                ? article.commitMessage.substring(0, 30) + '...' 
                 : article.commitMessage;
             
-            // 元数据（强制换行）
             const cardMeta = document.createElement('div');
             cardMeta.className = 'card-meta';
-            cardMeta.style.cssText = `
-                display: flex;
-                flex-direction: column;
-                gap: 6px;
-                font-size: 0.85rem;
-                color: #6b7280;
-                margin-top: 12px;
-                padding-top: 12px;
-                border-top: 1px dashed #e5e7eb;
+            cardMeta.innerHTML = `
+                <div><i class="fa fa-clock-o"></i> 最后修改: ${article.lastModified}</div>
+                <div><i class="fa fa-comment"></i> 提交信息: ${shortMessage}</div>
             `;
-            
-            // 分别创建三个元数据元素（确保换行）
-            const authorEl = document.createElement('div');
-            authorEl.innerHTML = `<i class="fa fa-user" style="margin-right: 6px;"></i> 作者: ${article.commitAuthor}`;
-            
-            const timeEl = document.createElement('div');
-            timeEl.innerHTML = `<i class="fa fa-clock-o" style="margin-right: 6px;"></i> 最后修改: ${article.lastModified}`;
-            
-            const messageEl = document.createElement('div');
-            messageEl.innerHTML = `<i class="fa fa-comment" style="margin-right: 6px;"></i> 提交信息: ${shortMessage}`;
-            
-            cardMeta.appendChild(authorEl);
-            cardMeta.appendChild(timeEl);
-            cardMeta.appendChild(messageEl);
             
             card.appendChild(cardTitle);
             card.appendChild(cardTags);
@@ -646,14 +378,10 @@
             return card;
         }
 
-        // 检查登录状态
+        // 检查登录状态（登录后刷新博客数据）
         function checkLoginStatus() {
             const userInfo = JSON.parse(localStorage.getItem('githubUserInfo') || 'null');
-            const token = localStorage.getItem('githubToken');
-            
-            logDebug(`检查登录状态: ${!!userInfo}`, 'info');
-            
-            if (userInfo && token) {
+            if (userInfo) {
                 // 已登录状态
                 usernameDisplay.textContent = userInfo.login;
                 usernameDisplay.style.display = 'inline';
@@ -666,6 +394,9 @@
                 logoutItem.classList.remove('disabled');
                 refreshItem.classList.remove('disabled');
                 apiStatusItem.classList.remove('disabled');
+
+                // 登录后主动刷新一次博客数据（使用认证token获取更高权限）
+                refreshBlogDataFromConfig();
 
             } else {
                 // 未登录状态
@@ -682,52 +413,46 @@
             }
         }
 
-        // 刷新博客数据
+        // 从配置文件刷新博客数据（封装通用逻辑）
         async function refreshBlogDataFromConfig() {
             try {
-                logDebug('手动刷新博客数据...', 'info');
-                loadingEl.style.display = 'block';
-                blogContainer.style.display = 'none';
-                await loadBlogData();
-                loadingEl.style.display = 'none';
-                blogContainer.style.display = 'block';
+                const response = await fetch('blog-config.json');
+                if (!response.ok) throw new Error('配置文件加载失败');
+                const blogConfig = await response.json();
+                await refreshBlogData(blogConfig);
             } catch (err) {
-                logDebug('刷新失败: ' + err.message, 'error');
+                console.error('刷新博客数据失败:', err);
                 alert('刷新失败: ' + err.message);
-                loadingEl.style.display = 'none';
-                blogContainer.style.display = 'block';
             }
         }
 
         // 登录处理
         async function handleLogin(token) {
             try {
-                logDebug('尝试登录...', 'info');
                 const userInfo = await getUserInfo(token);
                 
-                // 保存登录信息
+                // 保存token和用户信息（不影响博客缓存）
                 localStorage.setItem('githubToken', token);
                 localStorage.setItem('githubUserInfo', JSON.stringify(userInfo));
-                logDebug(`登录成功，用户: ${userInfo.login}`, 'success');
                 
-                // 更新状态并刷新数据
+                // 更新登录状态并刷新数据
                 checkLoginStatus();
                 loginForm.style.display = 'none';
-                await refreshBlogDataFromConfig();
+                
                 return true;
             } catch (err) {
-                const errorMsg = err.message;
-                logDebug('登录失败: ' + errorMsg, 'error');
-                alert('登录失败: ' + errorMsg);
+                alert('登录失败: ' + (err.response?.data?.message || err.message));
                 return false;
             }
         }
 
-        // 登出处理
+        // 登出处理（保留博客缓存）
         function handleLogout() {
-            logDebug('执行登出...', 'info');
+            // 只清除登录相关缓存，保留博客数据缓存
             localStorage.removeItem('githubToken');
             localStorage.removeItem('githubUserInfo');
+            
+            // 更新登录状态（不刷新博客数据，保持缓存）
             checkLoginStatus();
         }
 
@@ -759,7 +484,7 @@
                 
                 apiStatusModal.style.display = 'flex';
             } catch (err) {
-                alert('查询API状态失败: ' + err.message);
+                alert('查询API状态失败: ' + (err.response?.data?.message || err.message));
             }
         }
 
@@ -823,7 +548,11 @@
             refreshItem.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 if (!refreshItem.classList.contains('disabled')) {
+                    loadingEl.style.display = 'block';
+                    blogContainer.style.display = 'none';
                     await refreshBlogDataFromConfig();
+                    loadingEl.style.display = 'none';
+                    blogContainer.style.display = 'block';
                     loginMenu.classList.remove('show');
                 }
             });

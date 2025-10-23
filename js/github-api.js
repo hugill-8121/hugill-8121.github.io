@@ -11,39 +11,30 @@ import { Octokit } from "https://esm.sh/octokit";
  * @returns {Promise<object>} 以文件路径为键的提交信息映射
  */
 async function fetchFileCommitsViaGraphQL(owner, repo, branch, filePaths, token, batchSize = 100) {
-    // 初始化Octokit（带调试日志）
-    const octokit = token ? new Octokit({ 
-        auth: token,
-        log: {
-            debug: (message) => console.debug(`[GraphQL Debug] ${message}`),
-            info: (message) => console.info(`[GraphQL Info] ${message}`),
-            warn: (message) => console.warn(`[GraphQL Warn] ${message}`),
-            error: (message) => console.error(`[GraphQL Error] ${message}`)
-        }
-    }) : new Octokit();
-    
+    const octokit = token ? new Octokit({ auth: token }) : new Octokit();
     const commitMap = {};
     const totalFiles = filePaths.length;
     
-    console.log(`[GraphQL] 开始查询 ${totalFiles} 个文件，分 ${Math.ceil(totalFiles / batchSize)} 批`);
+    // 计算需要多少批次
+    const totalBatches = Math.ceil(totalFiles / batchSize);
+    console.log(`需要查询${totalBatches}批文件，每批${batchSize}个`);
     
-    for (let batch = 0; batch < Math.ceil(totalFiles / batchSize); batch++) {
+    for (let batch = 0; batch < totalBatches; batch++) {
+        // 计算当前批次的文件范围
         const startIndex = batch * batchSize;
         const endIndex = Math.min((batch + 1) * batchSize, totalFiles);
         const currentBatchPaths = filePaths.slice(startIndex, endIndex);
+        console.log(`处理第${batch + 1}/${totalBatches}批，文件范围: ${startIndex}-${endIndex}`);
         
-        console.log(`[GraphQL] 处理第 ${batch + 1} 批: 文件 ${startIndex}-${endIndex}`);
-        console.log(`[GraphQL] 当前批文件路径:`, currentBatchPaths);
-        
-        // 构建GraphQL查询（动态生成字段）
+        // 构建GraphQL查询（动态生成多个文件的查询字段）
         const fileQueries = currentBatchPaths.map((path, index) => {
+            // 为每个文件生成唯一的查询字段名
             const fieldName = `file_${batch}_${index}`;
-            // 处理路径中的特殊字符（如空格、中文）
-            const safePath = path.replace(/"/g, '\\"'); // 转义双引号
             return `
-                ${fieldName}: object(expression: "${branch}:${safePath}") {
+                ${fieldName}: object(expression: "${branch}:${path}") {
                     ... on Blob {
                         id
+                        commitUrl
                         latestCommit: history(first: 1) {
                             nodes {
                                 author {
@@ -51,7 +42,6 @@ async function fetchFileCommitsViaGraphQL(owner, repo, branch, filePaths, token,
                                 }
                                 committedDate
                                 message
-                                oid # 提交ID，用于调试
                             }
                         }
                     }
@@ -59,6 +49,7 @@ async function fetchFileCommitsViaGraphQL(owner, repo, branch, filePaths, token,
             `;
         }).join('\n');
         
+        // 完整的GraphQL查询
         const query = `
             query {
                 repository(owner: "${owner}", name: "${repo}") {
@@ -67,69 +58,53 @@ async function fetchFileCommitsViaGraphQL(owner, repo, branch, filePaths, token,
             }
         `;
         
-        console.log(`[GraphQL] 第 ${batch + 1} 批查询语句:`, query);
-        
         try {
+            // 执行GraphQL查询
             const { data } = await octokit.graphql(query);
-            console.log(`[GraphQL] 第 ${batch + 1} 批查询结果:`, data);
             
-            // 处理当前批次结果
+            // 处理当前批次的查询结果
             currentBatchPaths.forEach((path, index) => {
                 const fieldName = `file_${batch}_${index}`;
-                const fileData = data.repository?.[fieldName];
+                const fileData = data.repository[fieldName];
                 
-                if (!fileData) {
-                    console.warn(`[GraphQL] 未找到文件 ${path} 的数据`);
+                if (fileData && fileData.latestCommit && fileData.latestCommit.nodes.length > 0) {
+                    const commit = fileData.latestCommit.nodes[0];
+                    const date = new Date(commit.committedDate);
+                    
+                    commitMap[path] = {
+                        lastModified: date.toLocaleString('zh-CN', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        }),
+                        commitAuthor: commit.author?.name || '未知作者',
+                        commitMessage: commit.message || '无提交信息'
+                    };
+                } else {
+                    console.warn(`未找到文件${path}的提交信息`);
                     commitMap[path] = {
                         lastModified: '未知时间',
                         commitAuthor: '未知作者',
-                        commitMessage: '未找到文件数据'
+                        commitMessage: '无提交信息'
                     };
-                    return;
                 }
-                
-                if (!fileData.latestCommit || fileData.latestCommit.nodes.length === 0) {
-                    console.warn(`[GraphQL] 文件 ${path} 无提交记录`);
-                    commitMap[path] = {
-                        lastModified: '未知时间',
-                        commitAuthor: '未知作者',
-                        commitMessage: '无提交记录'
-                    };
-                    return;
-                }
-                
-                // 提取有效数据
-                const commit = fileData.latestCommit.nodes[0];
-                const date = new Date(commit.committedDate);
-                commitMap[path] = {
-                    lastModified: date.toLocaleString('zh-CN', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    }),
-                    commitAuthor: commit.author?.name || '未知作者',
-                    commitMessage: commit.message || '无提交信息',
-                    commitId: commit.oid // 提交ID，用于调试
-                };
-                console.log(`[GraphQL] 文件 ${path} 解析成功:`, commitMap[path]);
             });
             
         } catch (err) {
-            console.error(`[GraphQL] 第 ${batch + 1} 批查询失败:`, err);
-            // 记录错误详情
+            console.error(`第${batch + 1}批查询失败:`, err);
+            // 为当前批次的文件设置默认值
             currentBatchPaths.forEach(path => {
                 commitMap[path] = {
                     lastModified: '查询失败',
                     commitAuthor: '未知作者',
-                    commitMessage: `API错误: ${err.message.substring(0, 30)}...`
+                    commitMessage: '获取提交信息失败'
                 };
             });
         }
     }
     
-    console.log(`[GraphQL] 所有批次查询完成，结果总数: ${Object.keys(commitMap).length}`);
     return commitMap;
 }
 
