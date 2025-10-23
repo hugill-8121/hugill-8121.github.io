@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub 文件编辑器（最终可用版）</title>
+    <style>
+        .status { padding: 10px; border-radius: 4px; margin: 10px 0; }
+        .success { background: #dff0d8; color: #3c763d; }
+        .error { background: #f2dede; color: #a94442; }
+        .debug { font-family: monospace; white-space: pre; margin: 10px 0; padding: 10px; background: #f8f8f8; }
+    </style>
+</head>
+<body>
+    <h1>GitHub 文件编辑器（匹配你的 API 路径）</h1>
+    <div>
+        <label>GitHub Token（必填，用你访问 API 时的有效 Token）</label>
+        <input type="password" id="token" placeholder="ghp_...">
+    </div>
+    <button id="load">加载文件（使用你的 API 路径）</button>
+    <button id="save">保存文件</button>
+    <textarea id="content" style="width:100%;height:200px;margin:10px 0;" placeholder="文件加载后将显示内容（当前为空文件）"></textarea>
+    <div id="status" class="status"></div>
+    <div class="debug" id="debug"></div>
+
+    <script type="module">
+        // 直接使用你能成功访问的 API 路径
+        const API_URL = "https://api.github.com/repos/hugill-8121/hugill-8121.github.io/contents/blog/%E6%B5%8B%E8%AF%95/%E6%B5%8B%E8%AF%95.md?ref=main";
+        let fileSHA = ""; // 存储文件 SHA，用于保存
+
+        // 显示状态和日志
+        function showStatus(msg, isError = false) {
+            const el = document.getElementById("status");
+            el.textContent = msg;
+            el.className = isError ? "status error" : "status success";
+        }
+
+        function logDebug(msg) {
+            document.getElementById("debug").textContent += msg + "\n";
+        }
+
+        // 加载文件：直接调用你提供的 API 路径
+        document.getElementById("load").addEventListener("click", async () => {
+            const token = document.getElementById("token").value.trim();
+            if (!token) {
+                showStatus("请输入你的有效 Token", true);
+                return;
+            }
+
+            // 重置状态和日志
+            showStatus("正在加载...");
+            logDebug(`=== 加载文件 ===`);
+            logDebug(`API 路径：${API_URL}`);
+
+            try {
+                // 直接发送请求（与你浏览器访问的逻辑完全一致）
+                const response = await fetch(API_URL, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Accept": "application/json"
+                    }
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(`${response.status} - ${errData.message || "加载失败"}`);
+                }
+
+                // 解析响应（与你提供的 JSON 结构完全匹配）
+                const fileData = await response.json();
+                logDebug(`加载成功！文件 SHA：${fileData.sha}`);
+                logDebug(`文件路径：${fileData.path}`);
+                logDebug(`文件大小：${fileData.size} Bytes（空文件）`);
+
+                // 存储 SHA 用于后续保存，显示空内容
+                fileSHA = fileData.sha;
+                document.getElementById("content").value = fileData.content ? atob(fileData.content) : "";
+                showStatus("文件加载成功（当前为空白文件，可直接编辑）");
+
+            } catch (err) {
+                logDebug(`加载错误：${err.message}`);
+                showStatus(`加载失败：${err.message}`, true);
+            }
+        });
+
+        // 保存文件：使用相同的路径和参数
+        document.getElementById("save").addEventListener("click", async () => {
+            const token = document.getElementById("token").value.trim();
+            const content = document.getElementById("content").value;
+
+            if (!token) {
+                showStatus("请输入 Token", true);
+                return;
+            }
+            if (!fileSHA) {
+                showStatus("请先点击「加载文件」", true);
+                return;
+            }
+
+            logDebug(`\n=== 保存文件 ===`);
+            try {
+                // 编码文件内容（兼容空内容）
+                const encodedContent = btoa(unescape(encodeURIComponent(content)));
+                // 构建提交信息（固定格式）
+                const commitMsg = `blog/测试/测试.md modified in ${new Date().toISOString()} by token`;
+
+                // 发送保存请求
+                const response = await fetch(API_URL, {
+                    method: "PUT",
+                    headers: {
+                        "Authorization": `Bearer ${token}`,
+                        "Accept": "application/json",
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        message: commitMsg,
+                        content: encodedContent,
+                        sha: fileSHA, // 必须携带文件当前 SHA
+                        branch: "main"
+                    })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(`${response.status} - ${errData.message || "保存失败"}`);
+                }
+
+                // 更新 SHA（避免下次保存冲突）
+                const result = await response.json();
+                fileSHA = result.content.sha;
+                logDebug(`保存成功！新文件 SHA：${fileSHA}`);
+                showStatus("文件已成功保存到 GitHub");
+
+            } catch (err) {
+                logDebug(`保存错误：${err.message}`);
+                showStatus(`保存失败：${err.message}`, true);
+            }
+        });
+    </script>
+</body>
+</html>

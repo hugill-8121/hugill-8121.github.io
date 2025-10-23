@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Token 与限流综合查询工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            line-height: 1.6;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+        #github-token {
+            width: 100%;
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+        button {
+            background: #0366d6;
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #005cc5;
+        }
+        .result-container {
+            margin-top: 2rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+        @media (max-width: 768px) {
+            .result-container {
+                grid-template-columns: 1fr;
+            }
+        }
+        .card {
+            padding: 1.5rem;
+            border-radius: 4px;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+        }
+        .card-title {
+            margin-top: 0;
+            color: #2d3748;
+            font-size: 1.2rem;
+            border-bottom: 1px solid #e9ecef;
+            padding-bottom: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .info-item {
+            margin: 0.8rem 0;
+            color: #4a5568;
+        }
+        .info-item strong {
+            color: #2d3748;
+            margin-right: 0.5rem;
+        }
+        .avatar {
+            width: 80px;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+        }
+        .raw-response {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            border-radius: 4px;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+        }
+        .response-title {
+            margin-top: 0;
+            color: #2d3748;
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+        }
+        .response-pre {
+            width: 100%;
+            max-height: 400px;
+            overflow-x: auto;
+            overflow-y: auto;
+            padding: 1rem;
+            background: #fff;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: #333;
+        }
+        .error {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: #fef2f2;
+            color: #d73a49;
+            border-radius: 4px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>GitHub Token 与限流综合查询工具</h1>
+    
+    <div class="form-group">
+        <label for="github-token">请输入 GitHub Token（必填，用于查询关联信息和授权限流）</label>
+        <input type="password" id="github-token" placeholder="格式：ghp_xxxxxxxxxx..." required>
+    </div>
+    
+    <button id="query-btn">执行查询</button>
+    
+    <!-- 错误提示 -->
+    <div class="error" id="error"></div>
+    
+    <!-- 核心结果区域（Token信息 + 限流状态） -->
+    <div class="result-container" id="result-container" style="display: none;">
+        <!-- Token 信息卡片 -->
+        <div class="card">
+            <h3 class="card-title">1. Token 关联信息</h3>
+            <div class="info-item">
+                <strong>用户名：</strong>
+                <span id="user-login">-</span>
+            </div>
+            <div class="info-item">
+                <strong>用户 ID：</strong>
+                <span id="user-id">-</span>
+            </div>
+            <div class="info-item">
+                <strong>用户类型：</strong>
+                <span id="user-type">-</span>
+            </div>
+            <div class="info-item">
+                <strong>用户头像：</strong>
+                <br>
+                <img id="user-avatar" class="avatar" src="" alt="用户头像" style="display: none;">
+            </div>
+            <div class="info-item">
+                <strong>用户主页：</strong>
+                <a id="user-html-url" href="" target="_blank" style="color: #0366d6;">-</a>
+            </div>
+        </div>
+        
+        <!-- 限流状态卡片 -->
+        <div class="card">
+            <h3 class="card-title">2. API 限流状态（授权请求）</h3>
+            <div class="info-item">
+                <strong>Core API 剩余次数：</strong>
+                <span id="core-remaining">-</span> / <span id="core-limit">-</span>
+            </div>
+            <div class="info-item">
+                <strong>Core API 重置时间：</strong>
+                <span id="core-reset">-</span>
+            </div>
+            <div class="info-item">
+                <strong>Search API 剩余次数：</strong>
+                <span id="search-remaining">-</span> / <span id="search-limit">-</span>
+            </div>
+            <div class="info-item">
+                <strong>Search API 重置时间：</strong>
+                <span id="search-reset">-</span>
+            </div>
+            <div class="info-item">
+                <strong>GraphQL API 剩余次数：</strong>
+                <span id="graphql-remaining">-</span> / <span id="graphql-limit">-</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 原始响应展示区域 -->
+    <div class="raw-response" id="raw-response" style="display: none;">
+        <h3 class="response-title">3. API 原始响应数据</h3>
+        <div class="info-item">
+            <strong>Token 信息响应（users.getAuthenticated）：</strong>
+            <pre class="response-pre" id="token-response-pre">{}</pre>
+        </div>
+        <div class="info-item" style="margin-top: 1rem;">
+            <strong>限流状态响应（rateLimit.get）：</strong>
+            <pre class="response-pre" id="limit-response-pre">{}</pre>
+        </div>
+    </div>
+
+    <script type="module">
+        import { Octokit } from "https://esm.sh/octokit";
+
+        // DOM 元素
+        const tokenInput = document.getElementById('github-token');
+        const queryBtn = document.getElementById('query-btn');
+        const errorDiv = document.getElementById('error');
+        const resultContainer = document.getElementById('result-container');
+        const rawResponseDiv = document.getElementById('raw-response');
+
+        // Token 信息 DOM
+        const userLogin = document.getElementById('user-login');
+        const userId = document.getElementById('user-id');
+        const userType = document.getElementById('user-type');
+        const userAvatar = document.getElementById('user-avatar');
+        const userHtmlUrl = document.getElementById('user-html-url');
+        const tokenResponsePre = document.getElementById('token-response-pre');
+
+        // 限流信息 DOM
+        const coreRemaining = document.getElementById('core-remaining');
+        const coreLimit = document.getElementById('core-limit');
+        const coreReset = document.getElementById('core-reset');
+        const searchRemaining = document.getElementById('search-remaining');
+        const searchLimit = document.getElementById('search-limit');
+        const searchReset = document.getElementById('search-reset');
+        const graphqlRemaining = document.getElementById('graphql-remaining');
+        const graphqlLimit = document.getElementById('graphql-limit');
+        const limitResponsePre = document.getElementById('limit-response-pre');
+
+        // 隐藏所有结果和错误
+        function hideAll() {
+            errorDiv.style.display = 'none';
+            resultContainer.style.display = 'none';
+            rawResponseDiv.style.display = 'none';
+        }
+
+        // 显示错误
+        function showError(msg) {
+            errorDiv.textContent = `查询失败：${msg}`;
+            errorDiv.style.display = 'block';
+        }
+
+        // 格式化 Unix 时间戳为本地时间
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        // 格式化原始响应为易读 JSON
+        function formatJson(data) {
+            return JSON.stringify(data, null, 2);
+        }
+
+        // 执行综合查询
+        queryBtn.addEventListener('click', async () => {
+            hideAll();
+            const token = tokenInput.value.trim();
+
+            if (!token) {
+                showError('请输入 GitHub Token');
+                return;
+            }
+
+            try {
+                // 初始化 Octokit
+                const octokit = new Octokit({ auth: token });
+                let tokenData, limitData;
+
+                // 1. 查询 Token 关联的用户信息
+                const tokenResponse = await octokit.rest.users.getAuthenticated();
+                tokenData = tokenResponse.data;
+
+                // 2. 查询 API 限流状态
+                const limitResponse = await octokit.rest.rateLimit.get();
+                limitData = limitResponse.data;
+
+                // ---------------------- 填充 Token 信息 ----------------------
+                userLogin.textContent = tokenData.login || '-';
+                userId.textContent = tokenData.id || '-';
+                userType.textContent = tokenData.type || '-';
+                
+                // 处理头像和主页链接
+                if (tokenData.avatar_url) {
+                    userAvatar.src = tokenData.avatar_url;
+                    userAvatar.style.display = 'block';
+                } else {
+                    userAvatar.style.display = 'none';
+                }
+                if (tokenData.html_url) {
+                    userHtmlUrl.href = tokenData.html_url;
+                    userHtmlUrl.textContent = tokenData.html_url;
+                } else {
+                    userHtmlUrl.href = '';
+                    userHtmlUrl.textContent = '-';
+                }
+                // 显示 Token 原始响应
+                tokenResponsePre.textContent = formatJson(tokenData);
+
+                // ---------------------- 填充限流信息 ----------------------
+                const core = limitData.resources.core || {};
+                const search = limitData.resources.search || {};
+                const graphql = limitData.resources.graphql || {};
+
+                // Core API（仓库、文件等操作）
+                coreRemaining.textContent = core.remaining || 0;
+                coreLimit.textContent = core.limit || 0;
+                coreReset.textContent = core.reset ? formatTimestamp(core.reset) : '-';
+
+                // Search API（搜索操作）
+                searchRemaining.textContent = search.remaining || 0;
+                searchLimit.textContent = search.limit || 0;
+                searchReset.textContent = search.reset ? formatTimestamp(search.reset) : '-';
+
+                // GraphQL API（GraphQL 操作）
+                graphqlRemaining.textContent = graphql.remaining || 0;
+                graphqlLimit.textContent = graphql.limit || 0;
+
+                // 显示限流原始响应
+                limitResponsePre.textContent = formatJson(limitData);
+
+                // 显示所有结果
+                resultContainer.style.display = 'grid';
+                rawResponseDiv.style.display = 'block';
+
+            } catch (err) {
+                // 捕获并显示详细错误
+                const errMsg = err.response?.data?.message || err.message || '未知错误';
+                const errStatus = err.status ? `（状态码：${err.status}）` : '';
+                showError(`${errMsg}${errStatus}`);
+                
+                // 显示错误响应（如果有）
+                if (err.response?.data) {
+                    rawResponseDiv.style.display = 'block';
+                    tokenResponsePre.textContent = `错误响应：${formatJson(err.response.data)}`;
+                    limitResponsePre.textContent = '未获取到限流数据（查询中断）';
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub 文件最新提交信息查询</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            display: grid;
+            gap: 20px;
+        }
+        .input-section {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        button {
+            background: #0366d6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #005cc5;
+        }
+        .results-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .results-section {
+                grid-template-columns: 1fr;
+            }
+        }
+        .result-box {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .result-item {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .result-item:last-child {
+            border-bottom: none;
+        }
+        .result-item strong {
+            color: #2d3748;
+            font-size: 1.05em;
+        }
+        .commit-meta {
+            margin-top: 8px;
+            font-size: 0.9em;
+            color: #4a5568;
+        }
+        .commit-message {
+            margin-top: 5px;
+            padding: 8px;
+            background: #f9fafb;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        .error {
+            color: #d73a49;
+            padding: 10px;
+            background: #fef2f2;
+            border-radius: 4px;
+        }
+        .loading {
+            color: #666;
+            font-style: italic;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>GitHub 文件最新提交信息查询</h1>
+    <div class="container">
+        <div class="input-section">
+            <div class="form-group">
+                <label for="github-token">GitHub Token（需要 repo 权限）</label>
+                <input type="password" id="github-token" placeholder="ghp_..." required>
+            </div>
+            <div class="form-group">
+                <label for="repo-owner">仓库所有者</label>
+                <input type="text" id="repo-owner" placeholder="例如：octokit" required>
+            </div>
+            <div class="form-group">
+                <label for="repo-name">仓库名称</label>
+                <input type="text" id="repo-name" placeholder="例如：octokit.js" required>
+            </div>
+            <div class="form-group">
+                <label for="file-paths">文件路径（每行一个）</label>
+                <textarea id="file-paths" placeholder="例如：src/octokit.ts&#10;README.md&#10;package.json">blog/grpc/grpc学习.md
+blog/测试/测试.md</textarea>
+            </div>
+            <div class="form-group">
+                <label for="branch">分支名称</label>
+                <input type="text" id="branch" value="main" placeholder="例如：main 或 master">
+            </div>
+            <button id="fetch-btn">获取最新提交信息</button>
+        </div>
+
+        <div class="results-section">
+            <div class="result-box">
+                <h2>REST API 结果</h2>
+                <div id="rest-results" class="results"></div>
+            </div>
+            <div class="result-box">
+                <h2>GraphQL 结果</h2>
+                <div id="graphql-results" class="results"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { Octokit } from "https://esm.sh/octokit";
+
+        // DOM 元素
+        const fetchBtn = document.getElementById('fetch-btn');
+        const restResults = document.getElementById('rest-results');
+        const graphqlResults = document.getElementById('graphql-results');
+
+        // 显示加载状态
+        function showLoading(element) {
+            element.innerHTML = '<div class="loading">加载中...</div>';
+        }
+
+        // 显示错误信息
+        function showError(element, message) {
+            element.innerHTML = `<div class="error">错误：${message}</div>`;
+        }
+
+        // 显示结果列表（新增 author 和 message 展示）
+        function showResults(element, results) {
+            if (results.length === 0) {
+                element.innerHTML = '<div>没有结果</div>';
+                return;
+            }
+
+            element.innerHTML = results.map(item => `
+                <div class="result-item">
+                    <strong>${item.path}</strong>
+                    ${item.error ? 
+                        `<div class="error">${item.error}</div>` : 
+                        `<div class="commit-meta">
+                            <div>作者：${item.authorName}（${item.authorEmail || '无邮箱'}）</div>
+                            <div>提交时间：${item.commitTime.toLocaleString()}</div>
+                            <div>SHA：${item.sha.slice(0, 7)}（完整：${item.sha}）</div>
+                        </div>
+                        <div class="commit-message">
+                            提交信息：${item.message}
+                        </div>`
+                    }
+                </div>
+            `).join('');
+        }
+
+        // REST API 调用（新增 author 和 message 提取）
+        async function getFileLatestCommitTimeRest(octokit, owner, repo, branch, path) {
+            try {
+                const response = await octokit.rest.repos.listCommits({
+                    owner,
+                    repo,
+                    sha: branch,
+                    path,
+                    per_page: 1
+                });
+
+                if (response.data.length === 0) {
+                    return { path, error: '未找到该文件的提交记录' };
+                }
+
+                const commit = response.data[0].commit;
+                return {
+                    path,
+                    authorName: commit.author.name,       // 提交作者名称
+                    authorEmail: commit.author.email,     // 提交作者邮箱
+                    message: commit.message,              // 提交信息
+                    commitTime: new Date(commit.author.date),
+                    sha: response.data[0].sha
+                };
+            } catch (error) {
+                return { 
+                    path, 
+                    error: error.message || '未知错误' 
+                };
+            }
+        }
+
+        // 批量通过 REST API 获取文件最新提交信息
+        async function batchGetFileCommitTimesRest(octokit, config) {
+            showLoading(restResults);
+            const { owner, repo, branch, files } = config;
+            
+            const results = await Promise.all(
+                files.map(file => getFileLatestCommitTimeRest(octokit, owner, repo, branch, file))
+            );
+            
+            showResults(restResults, results);
+            return results;
+        }
+
+        // GraphQL 调用（新增 author 和 message 提取）
+        async function batchGetFileCommitTimesGraphql(octokit, config) {
+            showLoading(graphqlResults);
+            const { owner, repo, branch, files } = config;
+            
+            // 构建 GraphQL 查询：获取作者、提交信息等字段
+            const query = `
+                query GetFileCommitTimes($owner: String!, $repo: String!) {
+                    repository(owner: $owner, name: $repo) {
+                        ${files.map((path, index) => `
+                            file${index}: ref(qualifiedName: "${branch}") {
+                                target {
+                                    ... on Commit {
+                                        history(first: 1, path: "${path}") {
+                                            nodes {
+                                                oid
+                                                message
+                                                author {
+                                                    name
+                                                    email
+                                                    date
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        `).join('')}
+                    }
+                }
+            `;
+
+            try {
+                const response = await octokit.graphql(query, {
+                    owner,
+                    repo
+                });
+
+                const results = [];
+                files.forEach((path, index) => {
+                    const fileData = response.repository[`file${index}`];
+                    if (fileData?.target?.history?.nodes?.length) {
+                        const commit = fileData.target.history.nodes[0];
+                        results.push({
+                            path,
+                            authorName: commit.author.name,    // 提交作者名称
+                            authorEmail: commit.author.email,  // 提交作者邮箱
+                            message: commit.message,           // 提交信息
+                            commitTime: new Date(commit.author.date),
+                            sha: commit.oid
+                        });
+                    } else {
+                        results.push({
+                            path,
+                            error: '未找到该文件的提交记录'
+                        });
+                    }
+                });
+
+                showResults(graphqlResults, results);
+                return results;
+            } catch (error) {
+                showError(graphqlResults, error.message || 'GraphQL 查询失败');
+                return [];
+            }
+        }
+
+        // 主函数
+        async function fetchCommitTimes() {
+            const token = document.getElementById('github-token').value;
+            const owner = document.getElementById('repo-owner').value.trim();
+            const repo = document.getElementById('repo-name').value.trim();
+            const branch = document.getElementById('branch').value.trim() || 'main';
+            const files = document.getElementById('file-paths').value
+                .split('\n')
+                .map(path => path.trim())
+                .filter(Boolean);
+
+            if (!token || !owner || !repo || files.length === 0) {
+                alert('请填写所有必填字段');
+                return;
+            }
+
+            const octokit = new Octokit({
+                auth: token,
+                userAgent: "file-commit-time-fetcher",
+                request: {
+                    fetch: window.fetch.bind(window)
+                }
+            });
+
+            try {
+                await Promise.all([
+                    batchGetFileCommitTimesRest(octokit, { owner, repo, branch, files }),
+                    batchGetFileCommitTimesGraphql(octokit, { owner, repo, branch, files })
+                ]);
+            } catch (error) {
+                showError(restResults, error.message);
+                showError(graphqlResults, error.message);
+            }
+        }
+
+        fetchBtn.addEventListener('click', fetchCommitTimes);
+    </script>
+</body>
+</html>
