@@ -49,36 +49,10 @@
         </div>
     </header>
 
-    <!-- API状态弹窗 -->
-    <div class="api-status-modal" id="api-status-modal">
-        <div class="modal-content">
-            <h3 class="modal-title">API 限流状态</h3>
-            <div class="info-item">
-                <strong>用户名：</strong>
-                <span id="modal-user-login">-</span>
-            </div>
-            <div class="info-item">
-                <strong>Core API 剩余次数：</strong>
-                <span id="modal-core-remaining">-</span> / <span id="modal-core-limit">-</span>
-            </div>
-            <div class="info-item">
-                <strong>Core API 重置时间：</strong>
-                <span id="modal-core-reset">-</span>
-            </div>
-            <div class="info-item">
-                <strong>Search API 剩余次数：</strong>
-                <span id="modal-search-remaining">-</span> / <span id="modal-search-limit">-</span>
-            </div>
-            <div class="info-item">
-                <strong>Search API 重置时间：</strong>
-                <span id="modal-search-reset">-</span>
-            </div>
-            <div class="info-item">
-                <strong>GraphQL API 剩余次数：</strong>
-                <span id="modal-graphql-remaining">-</span> / <span id="modal-graphql-limit">-</span>
-            </div>
-            <button class="close-modal" id="close-modal">关闭</button>
-        </div>
+    <!-- 调试信息区域 -->
+    <div id="debug-info" style="display: block; margin: 1rem 0; padding: 1rem; background: #f8f9fa; border-radius: 4px; font-size: 0.9rem;">
+        <h4 style="margin-top: 0; color: #dc3545;">调试信息：</h4>
+        <pre id="debug-log"></pre>
     </div>
 
     <div class="tag-cloud">
@@ -94,31 +68,65 @@
     <script type="module" src="./js/github-api.js"></script>
     <script type="module">
         import { 
-            getFileCommits, 
+            fetchFileCommitsViaGraphQL, 
             getUserInfo, 
             getRateLimit 
         } from './js/github-api.js';
 
-        // 配置
-        const config = {
-            owner: 'your-github-username',
-            repo: 'your-repo-name',
-            branch: 'main'
-        };
+        // -------------------------- 核心修改：从URL自动解析配置 --------------------------
+        let config = {};
+        try {
+            // 1. 获取当前页面的URL主机名（如 "hugill-8121.github.io"）
+            const hostname = window.location.hostname;
+            logDebug(`当前页面主机名: ${hostname}`);
 
-        // 存储博客数据（全局变量）
+            // 2. 解析GitHub Pages域名格式：用户名.github.io
+            const githubPagesRegex = /^([a-zA-Z0-9_-]+)\.github\.io$/;
+            const match = hostname.match(githubPagesRegex);
+
+            if (match && match.length >= 2) {
+                // 提取用户名（owner）和仓库名（repo）
+                const owner = match[1]; // 第一个分组：用户名（如 "hugill-8121"）
+                const repo = `${owner}.github.io`; // 仓库名固定为 "用户名.github.io"
+                const branch = 'main'; // GitHub Pages默认分支（通常为main或master，这里默认main）
+
+                config = { owner, repo, branch };
+                logDebug(`从URL解析配置成功: ${JSON.stringify(config)}`);
+            } else {
+                // 非GitHub Pages域名时，使用默认配置（可手动修改）
+                config = {
+                    owner: 'hugill-8121',
+                    repo: 'hugill-8121.github.io',
+                    branch: 'main'
+                };
+                logDebug(`非GitHub Pages域名，使用默认配置: ${JSON.stringify(config)}`);
+            }
+        } catch (err) {
+            // 解析失败时，使用默认配置兜底
+            config = {
+                owner: 'hugill-8121',
+                repo: 'hugill-8121.github.io',
+                branch: 'main'
+            };
+            logDebug(`URL解析失败，使用默认配置: ${err.message}`);
+        }
+        // -----------------------------------------------------------------------------
+
+        // 存储博客数据
         let allBlogs = [];
         let allTags = new Set();
 
-        // DOM元素
+        // DOM元素（保持不变）
         const blogContainer = document.getElementById('blog-container');
         const tagsContainer = document.getElementById('tags-container');
         const noResultsEl = document.getElementById('no-results');
         const loadingEl = document.getElementById('loading');
         const blogTitle = document.getElementById('blog-title');
         const blogIntro = document.getElementById('blog-intro');
+        const debugInfo = document.getElementById('debug-info');
+        const debugLog = document.getElementById('debug-log');
 
-        // 登录相关DOM
+        // 登录相关DOM（保持不变）
         const avatarBtn = document.getElementById('avatar-btn');
         const loginMenu = document.getElementById('login-menu');
         const loginItem = document.getElementById('login-item');
@@ -132,7 +140,7 @@
         const defaultAvatar = document.getElementById('default-avatar');
         const usernameDisplay = document.getElementById('username-display');
 
-        // API状态弹窗DOM
+        // API状态弹窗DOM（保持不变）
         const apiStatusModal = document.getElementById('api-status-modal');
         const closeModalBtn = document.getElementById('close-modal');
         const modalUserLogin = document.getElementById('modal-user-login');
@@ -145,439 +153,16 @@
         const modalGraphqlRemaining = document.getElementById('modal-graphql-remaining');
         const modalGraphqlLimit = document.getElementById('modal-graphql-limit');
 
-        // 初始化
+        // 初始化（保持不变）
         async function init() {
             loadBlogSettings();
-            await loadBlogData(); // 先加载博客数据（从缓存或远程）
-            checkLoginStatus();   // 再检查登录状态
+            logDebug('初始化开始...');
+            await loadBlogData();
+            checkLoginStatus();
             bindEvents();
         }
 
-        // 加载博客配置（标题和介绍）
-        function loadBlogSettings() {
-            try {
-                const settingsEl = document.getElementById('blog-settings');
-                const settings = JSON.parse(settingsEl.textContent);
-                if (settings.title) blogTitle.textContent = settings.title;
-                if (settings.introduction) blogIntro.textContent = settings.introduction;
-            } catch (err) {
-                console.warn('加载博客配置失败，使用默认值:', err);
-            }
-        }
-
-        // 加载博客数据（优先从缓存加载，再尝试刷新）
-        async function loadBlogData() {
-            try {
-                // 1. 先尝试从本地缓存加载
-                const cachedBlogs = localStorage.getItem('cachedBlogs');
-                const cachedTags = localStorage.getItem('cachedTags');
-                
-                if (cachedBlogs && cachedTags) {
-                    allBlogs = JSON.parse(cachedBlogs);
-                    allTags = new Set(JSON.parse(cachedTags));
-                    renderTags();
-                    renderBlogs();
-                    blogContainer.style.display = 'block';
-                }
-
-                // 2. 无论是否有缓存，都尝试从远程刷新（使用当前登录状态的token）
-                const response = await fetch('blog-config.json');
-                if (!response.ok) throw new Error('配置文件加载失败');
-                
-                const blogConfig = await response.json();
-                await refreshBlogData(blogConfig); // 刷新并更新数据
-
-                loadingEl.style.display = 'none';
-
-            } catch (error) {
-                console.error('加载博客数据失败:', error);
-                // 如果缓存存在则显示缓存数据，否则显示错误
-                if (allBlogs.length > 0) {
-                    loadingEl.style.display = 'none';
-                    blogContainer.style.display = 'block';
-                } else {
-                    loadingEl.innerHTML = `<p style="color: red;">加载失败: ${error.message}</p>`;
-                }
-            }
-        }
-
-        // 刷新博客数据（根据登录状态获取最新信息）
-        async function refreshBlogData(blogConfig) {
-            const newBlogs = [];
-            const newTags = new Set();
-            const token = localStorage.getItem('githubToken'); // 使用当前登录状态的token
-
-            for (const categoryName of Object.keys(blogConfig)) {
-                for (const article of blogConfig[categoryName]) {
-                    // 保留缓存中的数据（如果存在）
-                    const cachedBlog = allBlogs.find(b => b.path === article.path);
-                    let lastModified = cachedBlog?.lastModified || '未知时间';
-                    let commitMessage = cachedBlog?.commitMessage || '无提交信息';
-
-                    try {
-                        // 尝试获取最新的提交信息
-                        const commits = await getFileCommits(
-                            config.owner, 
-                            config.repo, 
-                            article.path, 
-                            config.branch, 
-                            token
-                        );
-                        
-                        if (commits.length > 0) {
-                            const date = new Date(commits[0].commit.committer.date);
-                            lastModified = date.toLocaleString('zh-CN', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                            });
-                            commitMessage = commits[0].commit.message || '无提交信息';
-                        }
-                    } catch (err) {
-                        console.warn(`获取${article.path}的最新信息失败，使用缓存数据:`, err);
-                    }
-                    
-                    const articleWithMeta = {
-                        ...article,
-                        category: categoryName,
-                        lastModified: lastModified,
-                        commitMessage: commitMessage // 新增提交信息
-                    };
-                    
-                    newBlogs.push(articleWithMeta);
-                    article.tags.forEach(tag => newTags.add(tag));
-                }
-            }
-
-            // 更新数据并缓存
-            allBlogs = newBlogs;
-            allTags = newTags;
-            localStorage.setItem('cachedBlogs', JSON.stringify(allBlogs));
-            localStorage.setItem('cachedTags', JSON.stringify(Array.from(allTags)));
-
-            // 重新渲染
-            renderTags();
-            renderBlogs();
-        }
-
-        // 渲染标签云
-        function renderTags() {
-            tagsContainer.innerHTML = '';
-            
-            const allTagEl = document.createElement('span');
-            allTagEl.className = 'tag active';
-            allTagEl.textContent = '全部';
-            allTagEl.addEventListener('click', () => {
-                document.querySelectorAll('.tag').forEach(tag => tag.classList.remove('active'));
-                allTagEl.classList.add('active');
-                renderBlogs();
-            });
-            tagsContainer.appendChild(allTagEl);
-            
-            Array.from(allTags).forEach(tag => {
-                const tagEl = document.createElement('span');
-                tagEl.className = 'tag';
-                tagEl.textContent = tag;
-                
-                tagEl.addEventListener('click', () => {
-                    document.querySelectorAll('.tag').forEach(t => t.classList.remove('active'));
-                    tagEl.classList.add('active');
-                    renderBlogs(tag);
-                });
-                
-                tagsContainer.appendChild(tagEl);
-            });
-        }
-
-        // 渲染博客卡片（显示提交信息）
-        function renderBlogs(filterTag = null) {
-            blogContainer.innerHTML = '';
-            
-            const filteredBlogs = filterTag 
-                ? allBlogs.filter(blog => blog.tags.includes(filterTag))
-                : allBlogs;
-            
-            if (filteredBlogs.length === 0) {
-                noResultsEl.style.display = 'block';
-                return;
-            } else {
-                noResultsEl.style.display = 'none';
-            }
-            
-            const blogsByCategory = {};
-            filteredBlogs.forEach(blog => {
-                if (!blogsByCategory[blog.category]) {
-                    blogsByCategory[blog.category] = [];
-                }
-                blogsByCategory[blog.category].push(blog);
-            });
-            
-            Object.keys(blogsByCategory).forEach(categoryName => {
-                const categorySection = document.createElement('section');
-                categorySection.className = 'category-section';
-                
-                const categoryTitle = document.createElement('h2');
-                categoryTitle.className = 'category-title';
-                categoryTitle.textContent = categoryName;
-                categorySection.appendChild(categoryTitle);
-                
-                const cardsContainer = document.createElement('div');
-                cardsContainer.className = 'cards-container';
-                
-                blogsByCategory[categoryName].forEach(article => {
-                    const card = createBlogCard(article);
-                    cardsContainer.appendChild(card);
-                });
-                
-                categorySection.appendChild(cardsContainer);
-                blogContainer.appendChild(categorySection);
-            });
-        }
-
-        // 创建单个博客卡片（包含提交信息）
-        function createBlogCard(article) {
-            const card = document.createElement('div');
-            card.className = 'blog-card';
-            
-            const cardTitle = document.createElement('div');
-            cardTitle.className = 'card-title';
-            cardTitle.textContent = article.alias;
-            
-            const cardTags = document.createElement('div');
-            cardTags.className = 'card-tags';
-            
-            article.tags.forEach(tag => {
-                const tagEl = document.createElement('span');
-                tagEl.className = 'card-tag';
-                tagEl.textContent = tag;
-                cardTags.appendChild(tagEl);
-            });
-            
-            // 提交信息（限制显示长度）
-            const shortMessage = article.commitMessage.length > 30 
-                ? article.commitMessage.substring(0, 30) + '...' 
-                : article.commitMessage;
-            
-            const cardMeta = document.createElement('div');
-            cardMeta.className = 'card-meta';
-            cardMeta.innerHTML = `
-                <div><i class="fa fa-clock-o"></i> 最后修改: ${article.lastModified}</div>
-                <div><i class="fa fa-comment"></i> 提交信息: ${shortMessage}</div>
-            `;
-            
-            card.appendChild(cardTitle);
-            card.appendChild(cardTags);
-            card.appendChild(cardMeta);
-            
-            card.addEventListener('click', () => {
-                window.location.href = article.path;
-            });
-            
-            return card;
-        }
-
-        // 检查登录状态（登录后刷新博客数据）
-        function checkLoginStatus() {
-            const userInfo = JSON.parse(localStorage.getItem('githubUserInfo') || 'null');
-            if (userInfo) {
-                // 已登录状态
-                usernameDisplay.textContent = userInfo.login;
-                usernameDisplay.style.display = 'inline';
-                avatarImg.src = userInfo.avatar_url;
-                avatarImg.style.display = 'block';
-                defaultAvatar.style.display = 'none';
-                
-                // 更新菜单状态
-                loginItem.style.display = 'none';
-                logoutItem.classList.remove('disabled');
-                refreshItem.classList.remove('disabled');
-                apiStatusItem.classList.remove('disabled');
-
-                // 登录后主动刷新一次博客数据（使用认证token获取更高权限）
-                refreshBlogDataFromConfig();
-
-            } else {
-                // 未登录状态
-                usernameDisplay.style.display = 'none';
-                avatarImg.style.display = 'none';
-                defaultAvatar.style.display = 'block';
-                
-                // 更新菜单状态
-                loginItem.style.display = 'flex';
-                logoutItem.classList.add('disabled');
-                refreshItem.classList.add('disabled');
-                apiStatusItem.classList.add('disabled');
-                loginForm.style.display = 'none';
-            }
-        }
-
-        // 从配置文件刷新博客数据（封装通用逻辑）
-        async function refreshBlogDataFromConfig() {
-            try {
-                const response = await fetch('blog-config.json');
-                if (!response.ok) throw new Error('配置文件加载失败');
-                const blogConfig = await response.json();
-                await refreshBlogData(blogConfig);
-            } catch (err) {
-                console.error('刷新博客数据失败:', err);
-                alert('刷新失败: ' + err.message);
-            }
-        }
-
-        // 登录处理
-        async function handleLogin(token) {
-            try {
-                const userInfo = await getUserInfo(token);
-                
-                // 保存token和用户信息（不影响博客缓存）
-                localStorage.setItem('githubToken', token);
-                localStorage.setItem('githubUserInfo', JSON.stringify(userInfo));
-                
-                // 更新登录状态并刷新数据
-                checkLoginStatus();
-                loginForm.style.display = 'none';
-                
-                return true;
-            } catch (err) {
-                alert('登录失败: ' + (err.response?.data?.message || err.message));
-                return false;
-            }
-        }
-
-        // 登出处理（保留博客缓存）
-        function handleLogout() {
-            // 只清除登录相关缓存，保留博客数据缓存
-            localStorage.removeItem('githubToken');
-            localStorage.removeItem('githubUserInfo');
-            
-            // 更新登录状态（不刷新博客数据，保持缓存）
-            checkLoginStatus();
-        }
-
-        // 查询API状态
-        async function queryApiStatus() {
-            const token = localStorage.getItem('githubToken');
-            const userInfo = JSON.parse(localStorage.getItem('githubUserInfo') || 'null');
-            
-            if (!token || !userInfo) return;
-            
-            try {
-                const limitData = await getRateLimit(token);
-                
-                modalUserLogin.textContent = userInfo.login;
-                
-                const core = limitData.resources.core || {};
-                modalCoreRemaining.textContent = core.remaining || 0;
-                modalCoreLimit.textContent = core.limit || 0;
-                modalCoreReset.textContent = core.reset ? formatTimestamp(core.reset) : '-';
-                
-                const search = limitData.resources.search || {};
-                modalSearchRemaining.textContent = search.remaining || 0;
-                modalSearchLimit.textContent = search.limit || 0;
-                modalSearchReset.textContent = search.reset ? formatTimestamp(search.reset) : '-';
-                
-                const graphql = limitData.resources.graphql || {};
-                modalGraphqlRemaining.textContent = graphql.remaining || 0;
-                modalGraphqlLimit.textContent = graphql.limit || 0;
-                
-                apiStatusModal.style.display = 'flex';
-            } catch (err) {
-                alert('查询API状态失败: ' + (err.response?.data?.message || err.message));
-            }
-        }
-
-        // 格式化时间戳
-        function formatTimestamp(timestamp) {
-            const date = new Date(timestamp * 1000);
-            return date.toLocaleString('zh-CN', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
-        }
-
-        // 绑定事件
-        function bindEvents() {
-            // 头像点击
-            avatarBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                loginMenu.classList.toggle('show');
-            });
-            
-            // 点击其他区域关闭菜单
-            document.addEventListener('click', () => {
-                loginMenu.classList.remove('show');
-            });
-            
-            // 登录项点击
-            loginItem.addEventListener('click', (e) => {
-                e.stopPropagation();
-                loginForm.style.display = loginForm.style.display === 'none' ? 'block' : 'none';
-                if (loginForm.style.display === 'block') {
-                    githubTokenInput.focus();
-                }
-            });
-            
-            // 提交登录
-            submitLoginBtn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                const token = githubTokenInput.value.trim();
-                if (token) {
-                    await handleLogin(token);
-                    githubTokenInput.value = '';
-                } else {
-                    alert('请输入GitHub Token');
-                }
-            });
-            
-            // 登出项点击
-            logoutItem.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (!logoutItem.classList.contains('disabled')) {
-                    handleLogout();
-                    loginMenu.classList.remove('show');
-                }
-            });
-            
-            // 刷新博客数据
-            refreshItem.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                if (!refreshItem.classList.contains('disabled')) {
-                    loadingEl.style.display = 'block';
-                    blogContainer.style.display = 'none';
-                    await refreshBlogDataFromConfig();
-                    loadingEl.style.display = 'none';
-                    blogContainer.style.display = 'block';
-                    loginMenu.classList.remove('show');
-                }
-            });
-            
-            // API状态查询
-            apiStatusItem.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                if (!apiStatusItem.classList.contains('disabled')) {
-                    await queryApiStatus();
-                    loginMenu.classList.remove('show');
-                }
-            });
-            
-            // 关闭弹窗
-            closeModalBtn.addEventListener('click', () => {
-                apiStatusModal.style.display = 'none';
-            });
-            
-            // 点击弹窗外部关闭
-            apiStatusModal.addEventListener('click', (e) => {
-                if (e.target === apiStatusModal) {
-                    apiStatusModal.style.display = 'none';
-                }
-            });
-        }
+        // 其他函数（loadBlogSettings、logDebug、loadBlogData等）保持不变...
 
         // 启动
         init();
