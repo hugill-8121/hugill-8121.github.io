@@ -40,6 +40,28 @@ async function getFileCommits(owner, repo, path, branch, token) {
 }
 
 /**
+ * 获取当前认证用户的信息
+ * @param {string} token - GitHub Token
+ * @returns {Promise<Object>} 用户信息对象
+ */
+async function getUserInfo(token) {
+    const octokit = new Octokit({ auth: token });
+    const { data } = await octokit.rest.users.getAuthenticated();
+    return data;
+}
+
+/**
+ * 获取API限流状态
+ * @param {string} token - GitHub Token
+ * @returns {Promise<Object>} 限流信息对象
+ */
+async function getRateLimit(token) {
+    const octokit = new Octokit({ auth: token });
+    const { data } = await octokit.rest.rateLimit.get();
+    return data;
+}
+
+/**
  * 批量获取文件的所有提交记录（自动分页查询）
  * @param {string} owner - 仓库所有者
  * @param {string} repo - 仓库名
@@ -122,28 +144,6 @@ async function batchGetFileCommits(owner, repo, paths, branch, token, perPage = 
             };
         }
     }));
-}
-
-/**
- * 获取当前认证用户的信息
- * @param {string} token - GitHub Token
- * @returns {Promise<Object>} 用户信息对象
- */
-async function getUserInfo(token) {
-    const octokit = new Octokit({ auth: token });
-    const { data } = await octokit.rest.users.getAuthenticated();
-    return data;
-}
-
-/**
- * 获取API限流状态
- * @param {string} token - GitHub Token
- * @returns {Promise<Object>} 限流信息对象
- */
-async function getRateLimit(token) {
-    const octokit = new Octokit({ auth: token });
-    const { data } = await octokit.rest.rateLimit.get();
-    return data;
 }
 
 export {
