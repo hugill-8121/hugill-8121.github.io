@@ -3,24 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>云风青的技术博客</title>
+    <title>这里是云风青的blog</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
-    <style>
-        /* 强制设置用户名链接样式，确保可点击感 */
-        .username-display {
-            color: #3b82f6; /* 蓝色，暗示链接 */
-            text-decoration: underline;
-            cursor: pointer;
-            margin-right: 8px;
-        }
-        .username-display:hover {
-            color: #2563eb; /*  hover时加深颜色 */
-        }
-    </style>
 </head>
 <body>
-    <!-- 配置信息 -->
+    <!-- 配置信息（供JS读取） -->
     <script id="blog-settings" type="application/json">
         {"title":"云风青的技术博客","introduction":"欢迎来到云风青的blog！这里分享技术心得和学习笔记"}
     </script>
@@ -31,8 +19,7 @@
         
         <!-- 登录相关元素 -->
         <div class="login-container">
-            <!-- 用户名链接（核心修改：确保a标签正确） -->
-            <a class="username-display" id="username-display" href="" target="_blank" rel="noopener noreferrer"></a>
+            <a class="username-display" id="username-display" href="" target="_blank"></a> <!-- 用户名显示（改为链接） -->
             <div class="avatar-btn" id="avatar-btn">
                 <img src="" alt="用户头像" class="avatar-img" id="avatar-img" style="display: none;">
                 <i class="fa fa-user" id="default-avatar" style="color: #6b7280;"></i>
@@ -68,7 +55,7 @@
             <h3 class="modal-title">API 限流状态</h3>
             <div class="info-item">
                 <strong>用户名：</strong>
-                <a id="modal-user-login" href="" target="_blank" rel="noopener noreferrer">-</a>
+                <a id="modal-user-login" href="" target="_blank">-</a> <!-- 改为链接 -->
             </div>
             <div class="info-item">
                 <strong>Core API 剩余次数：</strong>
@@ -103,22 +90,24 @@
     <div id="blog-container" style="display: none;"></div>
     <div class="no-results" id="no-results" style="display: none;">没有找到匹配标签的文章</div>
 
+    <!-- 引入GitHub API封装和主逻辑 -->
     <script type="module" src="./js/github-api.js"></script>
     <script type="module">
         import { 
+            Octokit, 
             getFileCommits, 
             getUserInfo, 
-            getRateLimit,
-            batchGetFileCommits
+            getRateLimit 
         } from './js/github-api.js';
 
-        // 从URL解析GitHub信息
-        const hostname = window.location.hostname;
-        const owner = hostname.split('.github.io')[0];
-        const repo = hostname;
-        const config = { owner, repo, branch: 'main' };
+        // 配置
+        const config = {
+            owner: 'your-github-username',
+            repo: 'your-repo-name',
+            branch: 'main'
+        };
 
-        // 全局变量
+        // 存储博客数据
         let allBlogs = [];
         let allTags = new Set();
 
@@ -144,7 +133,7 @@
         const defaultAvatar = document.getElementById('default-avatar');
         const usernameDisplay = document.getElementById('username-display');
 
-        // 弹窗DOM
+        // API状态弹窗DOM
         const apiStatusModal = document.getElementById('api-status-modal');
         const closeModalBtn = document.getElementById('close-modal');
         const modalUserLogin = document.getElementById('modal-user-login');
@@ -159,20 +148,21 @@
 
         // 初始化
         async function init() {
-            loadBlogSettings();
-            checkLoginStatus();
-            await initBlog();
-            bindEvents();
+            loadBlogSettings(); // 加载博客配置
+            checkLoginStatus(); // 检查登录状态
+            await initBlog();   // 初始化博客内容
+            bindEvents();       // 绑定事件
         }
 
-        // 加载博客配置
+        // 加载博客标题和介绍（从配置中读取）
         function loadBlogSettings() {
             try {
-                const settings = JSON.parse(document.getElementById('blog-settings').textContent);
-                blogTitle.textContent = settings.title || '技术博客';
-                blogIntro.textContent = settings.introduction || '分享技术心得';
+                const settingsEl = document.getElementById('blog-settings');
+                const settings = JSON.parse(settingsEl.textContent);
+                if (settings.title) blogTitle.textContent = settings.title;
+                if (settings.introduction) blogIntro.textContent = settings.introduction;
             } catch (err) {
-                console.warn('加载配置失败:', err);
+                console.warn('加载博客配置失败，使用默认值:', err);
             }
         }
 
@@ -189,131 +179,135 @@
 
                 loadingEl.style.display = 'none';
                 blogContainer.style.display = 'block';
+
             } catch (error) {
                 console.error('初始化失败:', error);
                 loadingEl.innerHTML = `<p style="color: red;">加载失败: ${error.message}</p>`;
             }
         }
 
-        // 处理博客数据
+        // 处理博客数据（添加提交信息等元数据）
         async function processBlogData(blogConfig) {
             allBlogs = [];
             allTags.clear();
-            const allFilePaths = [];
 
-            // 收集所有文件路径
-            for (const [category, articles] of Object.entries(blogConfig)) {
-                articles.forEach(article => allFilePaths.push(article.path));
-            }
-
-            // 批量获取提交信息
-            let batchResults = {};
-            const token = localStorage.getItem('githubToken');
-            if (token && allFilePaths.length > 0) {
-                batchResults = (await batchGetFileCommits(
-                    config.owner, config.repo, allFilePaths, config.branch, token
-                )).reduce((map, item) => {
-                    map[item.path] = item;
-                    return map;
-                }, {});
-            }
-
-            // 处理文章元数据
-            for (const [category, articles] of Object.entries(blogConfig)) {
+            // 遍历所有分类
+            for (const categoryName in blogConfig.categories) {
+                const articles = blogConfig.categories[categoryName];
+                
+                // 为每篇文章添加提交信息
                 for (const article of articles) {
                     try {
-                        const result = batchResults[article.path] || {};
-                        const lastCommit = result.commits?.[0];
+                        const token = localStorage.getItem('githubToken');
+                        const commits = await getFileCommits(
+                            config.owner, 
+                            config.repo, 
+                            article.path, 
+                            config.branch,
+                            token
+                        );
+
+                        if (commits.length > 0) {
+                            const lastCommit = commits[0];
+                            article.lastModified = new Date(lastCommit.commit.committer.date);
+                            article.author = lastCommit.commit.committer.name;
+                        }
                         
-                        allBlogs.push({
-                            ...article,
-                            category,
-                            lastModified: lastCommit ? new Date(lastCommit.commit.committer.date) : null,
-                            authorName: lastCommit ? lastCommit.commit.author?.name : null
-                        });
-                        
+                        allBlogs.push({...article, category: categoryName});
                         article.tags.forEach(tag => allTags.add(tag));
+                        
                     } catch (error) {
-                        console.warn(`处理文章 ${article.alias} 失败:`, error);
-                        allBlogs.push({...article, category});
+                        console.warn(`获取文章 "${article.title}" 的提交信息失败:`, error);
+                        // 即使获取失败也添加文章，只是没有元数据
+                        allBlogs.push({...article, category: categoryName});
                         article.tags.forEach(tag => allTags.add(tag));
                     }
                 }
             }
         }
 
-        // 渲染标签
+        // 渲染标签云
         function renderTags() {
             tagsContainer.innerHTML = '';
             
-            const allTag = document.createElement('span');
-            allTag.className = 'tag active';
-            allTag.textContent = '全部';
-            allTag.onclick = () => {
-                document.querySelectorAll('.tag').forEach(t => t.classList.remove('active'));
-                allTag.classList.add('active');
+            const allTagEl = document.createElement('span');
+            allTagEl.className = 'tag active';
+            allTagEl.textContent = '全部';
+            allTagEl.addEventListener('click', () => {
+                document.querySelectorAll('.tag').forEach(tag => tag.classList.remove('active'));
+                allTagEl.classList.add('active');
                 renderBlogs();
-            };
-            tagsContainer.appendChild(allTag);
+            });
+            tagsContainer.appendChild(allTagEl);
             
             Array.from(allTags).forEach(tag => {
                 const tagEl = document.createElement('span');
                 tagEl.className = 'tag';
                 tagEl.textContent = tag;
-                tagEl.onclick = () => {
+                
+                tagEl.addEventListener('click', () => {
                     document.querySelectorAll('.tag').forEach(t => t.classList.remove('active'));
                     tagEl.classList.add('active');
                     renderBlogs(tag);
-                };
+                });
+                
                 tagsContainer.appendChild(tagEl);
             });
         }
 
-        // 渲染博客
+        // 渲染博客卡片
         function renderBlogs(filterTag = null) {
             blogContainer.innerHTML = '';
-            const filtered = filterTag 
+            
+            const filteredBlogs = filterTag 
                 ? allBlogs.filter(blog => blog.tags.includes(filterTag))
                 : allBlogs;
-
-            if (filtered.length === 0) {
+            
+            if (filteredBlogs.length === 0) {
                 noResultsEl.style.display = 'block';
                 return;
+            } else {
+                noResultsEl.style.display = 'none';
             }
-            noResultsEl.style.display = 'none';
-
-            const grouped = {};
-            filtered.forEach(blog => {
-                if (!grouped[blog.category]) grouped[blog.category] = [];
-                grouped[blog.category].push(blog);
+            
+            const blogsByCategory = {};
+            filteredBlogs.forEach(blog => {
+                if (!blogsByCategory[blog.category]) {
+                    blogsByCategory[blog.category] = [];
+                }
+                blogsByCategory[blog.category].push(blog);
             });
-
-            Object.entries(grouped).forEach(([category, blogs]) => {
-                const section = document.createElement('section');
-                section.className = 'category-section';
+            
+            Object.keys(blogsByCategory).forEach(categoryName => {
+                const categorySection = document.createElement('section');
+                categorySection.className = 'category-section';
                 
-                const title = document.createElement('h2');
-                title.className = 'category-title';
-                title.textContent = category;
-                section.appendChild(title);
+                const categoryTitle = document.createElement('h2');
+                categoryTitle.className = 'category-title';
+                categoryTitle.textContent = categoryName;
+                categorySection.appendChild(categoryTitle);
                 
-                const cards = document.createElement('div');
-                cards.className = 'cards-container';
-                blogs.forEach(blog => cards.appendChild(createBlogCard(blog)));
+                const cardsContainer = document.createElement('div');
+                cardsContainer.className = 'cards-container';
+                categorySection.appendChild(cardsContainer);
                 
-                section.appendChild(cards);
-                blogContainer.appendChild(section);
+                blogsByCategory[categoryName].forEach(article => {
+                    const card = createBlogCard(article);
+                    cardsContainer.appendChild(card);
+                });
+                
+                blogContainer.appendChild(categorySection);
             });
         }
 
-        // 创建博客卡片（使用alias作为标题）
+        // 创建博客卡片
         function createBlogCard(article) {
             const card = document.createElement('div');
             card.className = 'blog-card';
             
             const title = document.createElement('h3');
             title.className = 'card-title';
-            title.textContent = article.alias; // 用alias作为标题
+            title.textContent = article.title;
             card.appendChild(title);
             
             const summary = document.createElement('p');
@@ -321,59 +315,52 @@
             summary.textContent = article.summary || '无摘要';
             card.appendChild(summary);
             
-            const tags = document.createElement('div');
-            tags.className = 'card-tags';
+            const cardTags = document.createElement('div');
+            cardTags.className = 'card-tags';
             article.tags.forEach(tag => {
-                const tagEl = document.createElement('span');
-                tagEl.className = 'card-tag';
-                tagEl.textContent = tag;
-                tags.appendChild(tagEl);
+                const tagSpan = document.createElement('span');
+                tagSpan.className = 'card-tag';
+                tagSpan.textContent = tag;
+                cardTags.appendChild(tagSpan);
             });
-            card.appendChild(tags);
+            card.appendChild(cardTags);
             
-            const meta = document.createElement('div');
-            meta.className = 'card-meta';
-            if (article.lastModified && article.authorName) {
-                meta.innerHTML = `
-                    <div><i class="fa fa-user"></i> 作者: ${article.authorName}</div>
-                    <div><i class="fa fa-clock-o"></i> 最后更新: ${article.lastModified.toLocaleString()}</div>
-                `;
-            } else if (article.lastModified) {
-                meta.innerHTML = `<div><i class="fa fa-clock-o"></i> 最后更新: ${article.lastModified.toLocaleString()}</div>`;
-            } else {
-                meta.innerHTML = `<div><i class="fa fa-info-circle"></i> 暂无更新信息</div>`;
+            // 添加最后修改时间
+            if (article.lastModified) {
+                const meta = document.createElement('div');
+                meta.className = 'card-meta';
+                meta.innerHTML = `<i class="fa fa-clock-o"></i> 最后更新: ${article.lastModified.toLocaleString()}`;
+                card.appendChild(meta);
             }
-            card.appendChild(meta);
-
-            card.onclick = () => window.location.href = article.path;
+            
             return card;
         }
 
-        // 检查登录状态（核心：设置用户名链接）
+        // 检查登录状态
         function checkLoginStatus() {
             const userInfo = JSON.parse(localStorage.getItem('githubUserInfo') || 'null');
             if (userInfo) {
-                // 已登录：设置链接和文本
-                usernameDisplay.textContent = userInfo.login;
-                usernameDisplay.href = userInfo.html_url; // 关键：设置GitHub主页链接
-                usernameDisplay.style.display = 'inline';
-                
+                // 已登录状态
+                usernameDisplay.textContent = userInfo.login; // 显示用户名
+                usernameDisplay.href = userInfo.html_url; // 设置GitHub主页链接
+                usernameDisplay.style.display = 'inline';      // 显示用户名元素
                 avatarImg.src = userInfo.avatar_url;
                 avatarImg.style.display = 'block';
                 defaultAvatar.style.display = 'none';
                 
+                // 更新菜单状态
                 logoutItem.classList.remove('disabled');
                 refreshItem.classList.remove('disabled');
                 apiStatusItem.classList.remove('disabled');
             } else {
-                // 未登录：清空链接
+                // 未登录状态
                 usernameDisplay.textContent = '';
-                usernameDisplay.href = '';
-                usernameDisplay.style.display = 'none';
-                
+                usernameDisplay.href = ''; // 清空链接
+                avatarImg.src = '';
                 avatarImg.style.display = 'none';
                 defaultAvatar.style.display = 'block';
                 
+                // 禁用需要登录的功能
                 logoutItem.classList.add('disabled');
                 refreshItem.classList.add('disabled');
                 apiStatusItem.classList.add('disabled');
@@ -382,7 +369,7 @@
 
         // 绑定事件
         function bindEvents() {
-            // 头像点击显示菜单
+            // 登录菜单切换
             avatarBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 loginMenu.classList.toggle('show');
@@ -391,12 +378,10 @@
             // 点击外部关闭菜单
             document.addEventListener('click', () => {
                 loginMenu.classList.remove('show');
-                loginForm.style.display = 'none';
             });
 
-            // 登录按钮
-            loginItem.addEventListener('click', (e) => {
-                e.stopPropagation();
+            // 登录按钮点击
+            loginItem.addEventListener('click', () => {
                 loginForm.style.display = loginForm.style.display === 'none' ? 'block' : 'none';
             });
 
@@ -413,80 +398,110 @@
                     localStorage.setItem('githubToken', token);
                     localStorage.setItem('githubUserInfo', JSON.stringify(userInfo));
                     
-                    checkLoginStatus(); // 登录后重新检查状态，设置链接
+                    checkLoginStatus();
                     loginForm.style.display = 'none';
                     githubTokenInput.value = '';
-                    await refreshBlogData(); // 刷新数据
+                    alert('登录成功');
                 } catch (error) {
+                    console.error('登录失败:', error);
                     alert(`登录失败: ${error.message}`);
                 }
             });
 
             // 登出
             logoutItem.addEventListener('click', () => {
+                if (logoutItem.classList.contains('disabled')) return;
+                
                 localStorage.removeItem('githubToken');
                 localStorage.removeItem('githubUserInfo');
                 checkLoginStatus();
-                loginMenu.classList.remove('show');
-                initBlog();
+                alert('已登出');
             });
 
-            // 刷新
+            // 刷新博客数据
             refreshItem.addEventListener('click', async () => {
+                if (refreshItem.classList.contains('disabled')) return;
+                
                 loadingEl.style.display = 'block';
                 blogContainer.style.display = 'none';
+                
                 try {
                     await refreshBlogData();
                     renderTags();
                     renderBlogs();
-                } catch (error) {
-                    alert(`刷新失败: ${error.message}`);
-                } finally {
+                    
                     loadingEl.style.display = 'none';
                     blogContainer.style.display = 'block';
+                    alert('刷新成功');
+                } catch (error) {
+                    loadingEl.innerHTML = `<p style="color: red;">刷新失败: ${error.message}</p>`;
                 }
             });
 
-            // API状态弹窗
+            // 查看API状态
             apiStatusItem.addEventListener('click', async () => {
+                if (apiStatusItem.classList.contains('disabled')) return;
+                
+                loginMenu.classList.remove('show');
                 const token = localStorage.getItem('githubToken');
                 if (!token) return;
 
                 try {
-                    const rateLimit = await getRateLimit(token);
+                    const rateLimitData = await getRateLimit(token);
                     const userInfo = JSON.parse(localStorage.getItem('githubUserInfo'));
                     
+                    // 更新弹窗数据（添加用户名链接）
                     modalUserLogin.textContent = userInfo.login;
-                    modalUserLogin.href = userInfo.html_url; // 弹窗用户名链接
+                    modalUserLogin.href = userInfo.html_url; // 设置GitHub主页链接
                     
-                    modalCoreRemaining.textContent = rateLimit.resources.core.remaining;
-                    modalCoreLimit.textContent = rateLimit.resources.core.limit;
-                    modalCoreReset.textContent = new Date(rateLimit.resources.core.reset * 1000).toLocaleString();
+                    // Core API 数据
+                    modalCoreRemaining.textContent = rateLimitData.resources.core.remaining;
+                    modalCoreLimit.textContent = rateLimitData.resources.core.limit;
+                    modalCoreReset.textContent = new Date(rateLimitData.resources.core.reset * 1000).toLocaleString();
                     
-                    modalSearchRemaining.textContent = rateLimit.resources.search.remaining;
-                    modalSearchLimit.textContent = rateLimit.resources.search.limit;
-                    modalSearchReset.textContent = new Date(rateLimit.resources.search.reset * 1000).toLocaleString();
+                    // Search API 数据
+                    modalSearchRemaining.textContent = rateLimitData.resources.search.remaining;
+                    modalSearchLimit.textContent = rateLimitData.resources.search.limit;
+                    modalSearchReset.textContent = new Date(rateLimitData.resources.search.reset * 1000).toLocaleString();
                     
-                    modalGraphqlRemaining.textContent = rateLimit.resources.graphql.remaining;
-                    modalGraphqlLimit.textContent = rateLimit.resources.graphql.limit;
+                    // GraphQL API 数据
+                    modalGraphqlRemaining.textContent = rateLimitData.resources.graphql.remaining;
+                    modalGraphqlLimit.textContent = rateLimitData.resources.graphql.limit;
                     
+                    // 显示弹窗
                     apiStatusModal.style.display = 'flex';
                 } catch (error) {
-                    alert(`获取状态失败: ${error.message}`);
+                    console.error('获取API状态失败:', error);
+                    alert(`获取API状态失败: ${error.message}`);
                 }
             });
 
-            // 关闭弹窗
+            // 关闭API状态弹窗
             closeModalBtn.addEventListener('click', () => {
                 apiStatusModal.style.display = 'none';
+            });
+            
+            // 点击弹窗外部关闭
+            apiStatusModal.addEventListener('click', (e) => {
+                if (e.target === apiStatusModal) {
+                    apiStatusModal.style.display = 'none';
+                }
             });
         }
 
         // 刷新博客数据
         async function refreshBlogData() {
-            const response = await fetch('blog-config.json');
-            if (!response.ok) throw new Error('配置文件加载失败');
-            await processBlogData(await response.json());
+            try {
+                const response = await fetch('blog-config.json');
+                if (!response.ok) throw new Error('配置文件加载失败');
+                
+                const blogConfig = await response.json();
+                await processBlogData(blogConfig);
+                return true;
+            } catch (error) {
+                console.error('刷新博客数据失败:', error);
+                throw error;
+            }
         }
 
         // 启动
