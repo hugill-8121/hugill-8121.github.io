@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>带标签的静态博客</title>
+    <title>这里是云风青的blog</title> <!-- 修改网页标题 -->
     <style>
         * {
             margin: 0;
@@ -24,14 +24,24 @@
             margin-bottom: 3rem;
             padding-bottom: 1rem;
             border-bottom: 1px solid #e5e7eb;
-            position: relative; /* 新增：用于定位登录按钮 */
+            position: relative;
         }
 
-        /* 新增：登录相关样式 */
+        /* 登录相关样式 */
         .login-container {
             position: absolute;
             top: 0;
             right: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem; /* 用户名和头像间距 */
+            padding: 0.5rem;
+        }
+
+        .username-display {
+            color: #1f2937;
+            font-weight: 500;
+            display: none; /* 未登录时隐藏 */
         }
 
         .avatar-btn {
@@ -163,7 +173,7 @@
             margin-top: 1rem;
         }
 
-        /* 原有样式保持不变 */
+        /* 博客主样式 */
         h1 {
             color: #111827;
             font-size: 2.5rem;
@@ -284,6 +294,9 @@
             .cards-container {
                 grid-template-columns: 1fr;
             }
+            .username-display {
+                display: none; /* 移动端隐藏用户名，节省空间 */
+            }
         }
 
         .no-results {
@@ -301,12 +314,18 @@
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
 </head>
 <body>
+    <!-- 配置信息（供JS读取） -->
+    <script id="blog-settings" type="application/json">
+        {"title":"云风青的技术博客","introduction":"欢迎来到云风青的blog！这里分享技术心得和学习笔记"}
+    </script>
+
     <header>
-        <h1>技术博客</h1>
-        <p class="header-desc">显示别名和修改时间的博客示例</p>
+        <h1 id="blog-title">技术博客</h1>
+        <p class="header-desc" id="blog-intro">显示别名和修改时间的博客示例</p>
         
-        <!-- 新增：登录相关元素 -->
+        <!-- 登录相关元素 -->
         <div class="login-container">
+            <span class="username-display" id="username-display"></span> <!-- 用户名显示 -->
             <div class="avatar-btn" id="avatar-btn">
                 <img src="" alt="用户头像" class="avatar-img" id="avatar-img" style="display: none;">
                 <i class="fa fa-user" id="default-avatar" style="color: #6b7280;"></i>
@@ -327,7 +346,7 @@
                     <i class="fa fa-bar-chart"></i> 查询API状态
                 </div>
                 
-                <!-- 登录表单 (默认隐藏) -->
+                <!-- 登录表单 -->
                 <div id="login-form" style="display: none; padding: 0 1rem 1rem;">
                     <input type="password" class="token-input" id="github-token" placeholder="输入GitHub Token (ghp_xxx...)">
                     <button class="login-btn" id="submit-login">确认登录</button>
@@ -336,7 +355,7 @@
         </div>
     </header>
 
-    <!-- 新增：API状态弹窗 -->
+    <!-- API状态弹窗 -->
     <div class="api-status-modal" id="api-status-modal">
         <div class="modal-content">
             <h3 class="modal-title">API 限流状态</h3>
@@ -370,23 +389,22 @@
 
     <div class="tag-cloud">
         <h2>标签云</h2>
-        <div class="tags-container" id="tags-container">
-            <!-- 标签会在这里动态生成 -->
-        </div>
+        <div class="tags-container" id="tags-container"></div>
     </div>
 
-    <div class="loading" id="loading">
-        正在加载博客内容...
-    </div>
-
+    <div class="loading" id="loading">正在加载博客内容...</div>
     <div id="blog-container" style="display: none;"></div>
+    <div class="no-results" id="no-results" style="display: none;">没有找到匹配标签的文章</div>
 
-    <div class="no-results" id="no-results" style="display: none;">
-        没有找到匹配标签的文章
-    </div>
-
+    <!-- 引入GitHub API封装和主逻辑 -->
+    <script type="module" src="./js/github-api.js"></script>
     <script type="module">
-        import { Octokit } from "https://esm.sh/octokit";
+        import { 
+            Octokit, 
+            getFileCommits, 
+            getUserInfo, 
+            getRateLimit 
+        } from './js/github-api.js';
 
         // 配置
         const config = {
@@ -395,7 +413,7 @@
             branch: 'main'
         };
 
-        // 存储所有博客数据和标签
+        // 存储博客数据
         let allBlogs = [];
         let allTags = new Set();
 
@@ -404,6 +422,8 @@
         const tagsContainer = document.getElementById('tags-container');
         const noResultsEl = document.getElementById('no-results');
         const loadingEl = document.getElementById('loading');
+        const blogTitle = document.getElementById('blog-title');
+        const blogIntro = document.getElementById('blog-intro');
 
         // 登录相关DOM
         const avatarBtn = document.getElementById('avatar-btn');
@@ -417,6 +437,7 @@
         const submitLoginBtn = document.getElementById('submit-login');
         const avatarImg = document.getElementById('avatar-img');
         const defaultAvatar = document.getElementById('default-avatar');
+        const usernameDisplay = document.getElementById('username-display');
 
         // API状态弹窗DOM
         const apiStatusModal = document.getElementById('api-status-modal');
@@ -433,15 +454,25 @@
 
         // 初始化
         async function init() {
-            // 检查登录状态
-            checkLoginStatus();
-            // 初始化博客
-            await initBlog();
-            // 绑定事件
-            bindEvents();
+            loadBlogSettings(); // 加载博客配置
+            checkLoginStatus(); // 检查登录状态
+            await initBlog();   // 初始化博客内容
+            bindEvents();       // 绑定事件
         }
 
-        // 初始化博客
+        // 加载博客标题和介绍（从配置中读取）
+        function loadBlogSettings() {
+            try {
+                const settingsEl = document.getElementById('blog-settings');
+                const settings = JSON.parse(settingsEl.textContent);
+                if (settings.title) blogTitle.textContent = settings.title;
+                if (settings.introduction) blogIntro.textContent = settings.introduction;
+            } catch (err) {
+                console.warn('加载博客配置失败，使用默认值:', err);
+            }
+        }
+
+        // 初始化博客内容
         async function initBlog() {
             try {
                 const response = await fetch('blog-config.json');
@@ -462,40 +493,30 @@
         }
 
         // 处理博客数据
-        async function processBlogData(config) {
-            for (const categoryName of Object.keys(config)) {
-                for (const article of config[categoryName]) {
+        async function processBlogData(blogConfig) {
+            for (const categoryName of Object.keys(blogConfig)) {
+                for (const article of blogConfig[categoryName]) {
                     let lastModified = '未知时间';
                     try {
-                        // 尝试使用缓存的token获取修改时间（如果已登录）
                         const token = localStorage.getItem('githubToken');
-                        let response;
+                        // 调用封装的API获取提交记录
+                        const commits = await getFileCommits(
+                            config.owner, 
+                            config.repo, 
+                            article.path, 
+                            config.branch, 
+                            token
+                        );
                         
-                        if (token) {
-                            // 使用认证请求
-                            response = await fetch(
-                                `https://api.github.com/repos/${config.owner}/${config.repo}/commits?path=${encodeURIComponent(article.path)}&ref=${config.branch}&per_page=1`,
-                                { headers: { 'Authorization': `token ${token}` } }
-                            );
-                        } else {
-                            // 未登录时使用匿名请求
-                            response = await fetch(
-                                `https://api.github.com/repos/${config.owner}/${config.repo}/commits?path=${encodeURIComponent(article.path)}&ref=${config.branch}&per_page=1`
-                            );
-                        }
-                        
-                        if (response.ok) {
-                            const commits = await response.json();
-                            if (commits.length > 0) {
-                                const date = new Date(commits[0].commit.committer.date);
-                                lastModified = date.toLocaleString('zh-CN', {
-                                    year: 'numeric',
-                                    month: 'long',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                });
-                            }
+                        if (commits.length > 0) {
+                            const date = new Date(commits[0].commit.committer.date);
+                            lastModified = date.toLocaleString('zh-CN', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            });
                         }
                     } catch (err) {
                         console.warn(`无法获取${article.path}的修改时间:`, err);
@@ -626,6 +647,8 @@
             const userInfo = JSON.parse(localStorage.getItem('githubUserInfo') || 'null');
             if (userInfo) {
                 // 已登录状态
+                usernameDisplay.textContent = userInfo.login; // 显示用户名
+                usernameDisplay.style.display = 'inline';      // 显示用户名元素
                 avatarImg.src = userInfo.avatar_url;
                 avatarImg.style.display = 'block';
                 defaultAvatar.style.display = 'none';
@@ -637,6 +660,7 @@
                 apiStatusItem.classList.remove('disabled');
             } else {
                 // 未登录状态
+                usernameDisplay.style.display = 'none'; // 隐藏用户名
                 avatarImg.style.display = 'none';
                 defaultAvatar.style.display = 'block';
                 
@@ -652,9 +676,8 @@
         // 登录处理
         async function handleLogin(token) {
             try {
-                const octokit = new Octokit({ auth: token });
-                const response = await octokit.rest.users.getAuthenticated();
-                const userInfo = response.data;
+                // 调用封装的API获取用户信息
+                const userInfo = await getUserInfo(token);
                 
                 // 保存token和用户信息
                 localStorage.setItem('githubToken', token);
@@ -689,9 +712,8 @@
             if (!token || !userInfo) return;
             
             try {
-                const octokit = new Octokit({ auth: token });
-                const response = await octokit.rest.rateLimit.get();
-                const limitData = response.data;
+                // 调用封装的API获取限流信息
+                const limitData = await getRateLimit(token);
                 
                 // 填充数据
                 modalUserLogin.textContent = userInfo.login;
