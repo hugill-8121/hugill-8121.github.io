@@ -24,8 +24,146 @@
             margin-bottom: 3rem;
             padding-bottom: 1rem;
             border-bottom: 1px solid #e5e7eb;
+            position: relative; /* 新增：用于定位登录按钮 */
         }
 
+        /* 新增：登录相关样式 */
+        .login-container {
+            position: absolute;
+            top: 0;
+            right: 0;
+        }
+
+        .avatar-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid #e5e7eb;
+            cursor: pointer;
+            transition: all 0.2s;
+            background-color: #f1f5f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .avatar-btn:hover {
+            border-color: #3b82f6;
+        }
+
+        .avatar-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .login-menu {
+            position: absolute;
+            top: 50px;
+            right: 0;
+            width: 200px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            padding: 0.5rem 0;
+            display: none;
+            z-index: 100;
+        }
+
+        .login-menu.show {
+            display: block;
+        }
+
+        .menu-item {
+            padding: 0.8rem 1rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .menu-item:hover {
+            background-color: #f1f5f9;
+        }
+
+        .menu-item.disabled {
+            color: #9ca3af;
+            cursor: not-allowed;
+            background-color: transparent;
+        }
+
+        .menu-divider {
+            height: 1px;
+            background-color: #e5e7eb;
+            margin: 0.5rem 0;
+        }
+
+        .token-input {
+            width: 100%;
+            padding: 0.5rem;
+            margin: 0.5rem 0;
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .login-btn {
+            width: 100%;
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .login-btn:hover {
+            background-color: #2563eb;
+        }
+
+        .api-status-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+
+        .modal-title {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            color: #1f2937;
+        }
+
+        .close-modal {
+            background-color: #ef4444;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+
+        /* 原有样式保持不变 */
         h1 {
             color: #111827;
             font-size: 2.5rem;
@@ -37,7 +175,6 @@
             font-size: 1.1rem;
         }
 
-        /* 标签云样式 */
         .tag-cloud {
             margin: 2rem 0 3rem;
             padding: 1.5rem;
@@ -73,7 +210,6 @@
             color: white;
         }
 
-        /* 分类区域 */
         .category-section {
             margin-bottom: 4rem;
         }
@@ -86,14 +222,12 @@
             border-left: 4px solid #3b82f6;
         }
 
-        /* 卡片容器 */
         .cards-container {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 2rem;
         }
 
-        /* 卡片样式 + 缩放效果 */
         .blog-card {
             background-color: white;
             border-radius: 8px;
@@ -117,7 +251,6 @@
             text-overflow: ellipsis;
         }
 
-        /* 卡片内的标签样式 */
         .card-tags {
             display: flex;
             flex-wrap: wrap;
@@ -133,7 +266,6 @@
             font-size: 0.8rem;
         }
 
-        /* 修改时间样式 */
         .card-meta {
             color: #6b7280;
             font-size: 0.9rem;
@@ -148,37 +280,94 @@
             font-size: 0.8rem;
         }
 
-        /* 响应式调整 */
         @media (max-width: 768px) {
             .cards-container {
                 grid-template-columns: 1fr;
             }
         }
 
-        /* 无结果提示 */
         .no-results {
             text-align: center;
             padding: 3rem;
             color: #6b7280;
         }
 
-        /* 加载状态 */
         .loading {
             text-align: center;
             padding: 5rem 2rem;
             color: #4b5563;
         }
     </style>
-    <!-- 引入Font Awesome图标库 -->
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
 </head>
 <body>
     <header>
         <h1>技术博客</h1>
         <p class="header-desc">显示别名和修改时间的博客示例</p>
+        
+        <!-- 新增：登录相关元素 -->
+        <div class="login-container">
+            <div class="avatar-btn" id="avatar-btn">
+                <img src="" alt="用户头像" class="avatar-img" id="avatar-img" style="display: none;">
+                <i class="fa fa-user" id="default-avatar" style="color: #6b7280;"></i>
+            </div>
+            
+            <div class="login-menu" id="login-menu">
+                <div class="menu-item" id="login-item">
+                    <i class="fa fa-sign-in"></i> 登录
+                </div>
+                <div class="menu-divider"></div>
+                <div class="menu-item disabled" id="logout-item">
+                    <i class="fa fa-sign-out"></i> 登出
+                </div>
+                <div class="menu-item disabled" id="refresh-item">
+                    <i class="fa fa-refresh"></i> 刷新
+                </div>
+                <div class="menu-item disabled" id="api-status-item">
+                    <i class="fa fa-bar-chart"></i> 查询API状态
+                </div>
+                
+                <!-- 登录表单 (默认隐藏) -->
+                <div id="login-form" style="display: none; padding: 0 1rem 1rem;">
+                    <input type="password" class="token-input" id="github-token" placeholder="输入GitHub Token (ghp_xxx...)">
+                    <button class="login-btn" id="submit-login">确认登录</button>
+                </div>
+            </div>
+        </div>
     </header>
 
-    <!-- 标签云：显示所有标签，可点击筛选 -->
+    <!-- 新增：API状态弹窗 -->
+    <div class="api-status-modal" id="api-status-modal">
+        <div class="modal-content">
+            <h3 class="modal-title">API 限流状态</h3>
+            <div class="info-item">
+                <strong>用户名：</strong>
+                <span id="modal-user-login">-</span>
+            </div>
+            <div class="info-item">
+                <strong>Core API 剩余次数：</strong>
+                <span id="modal-core-remaining">-</span> / <span id="modal-core-limit">-</span>
+            </div>
+            <div class="info-item">
+                <strong>Core API 重置时间：</strong>
+                <span id="modal-core-reset">-</span>
+            </div>
+            <div class="info-item">
+                <strong>Search API 剩余次数：</strong>
+                <span id="modal-search-remaining">-</span> / <span id="modal-search-limit">-</span>
+            </div>
+            <div class="info-item">
+                <strong>Search API 重置时间：</strong>
+                <span id="modal-search-reset">-</span>
+            </div>
+            <div class="info-item">
+                <strong>GraphQL API 剩余次数：</strong>
+                <span id="modal-graphql-remaining">-</span> / <span id="modal-graphql-limit">-</span>
+            </div>
+            <button class="close-modal" id="close-modal">关闭</button>
+        </div>
+    </div>
+
     <div class="tag-cloud">
         <h2>标签云</h2>
         <div class="tags-container" id="tags-container">
@@ -186,28 +375,27 @@
         </div>
     </div>
 
-    <!-- 加载状态 -->
     <div class="loading" id="loading">
         正在加载博客内容...
     </div>
 
-    <!-- 博客内容容器 -->
     <div id="blog-container" style="display: none;"></div>
 
-    <!-- 无结果提示（默认隐藏） -->
     <div class="no-results" id="no-results" style="display: none;">
         没有找到匹配标签的文章
     </div>
 
-    <script>
-        // 配置 - 替换为你的GitHub信息
+    <script type="module">
+        import { Octokit } from "https://esm.sh/octokit";
+
+        // 配置
         const config = {
-            owner: 'your-github-username',  // 你的GitHub用户名
-            repo: 'your-repo-name',         // 你的仓库名
-            branch: 'main'                  // 你的分支名
+            owner: 'your-github-username',
+            repo: 'your-repo-name',
+            branch: 'main'
         };
 
-        // 存储所有博客数据（含标签和修改时间）和所有标签的集合
+        // 存储所有博客数据和标签
         let allBlogs = [];
         let allTags = new Set();
 
@@ -217,23 +405,53 @@
         const noResultsEl = document.getElementById('no-results');
         const loadingEl = document.getElementById('loading');
 
-        // 初始化：加载配置并处理标签
+        // 登录相关DOM
+        const avatarBtn = document.getElementById('avatar-btn');
+        const loginMenu = document.getElementById('login-menu');
+        const loginItem = document.getElementById('login-item');
+        const logoutItem = document.getElementById('logout-item');
+        const refreshItem = document.getElementById('refresh-item');
+        const apiStatusItem = document.getElementById('api-status-item');
+        const loginForm = document.getElementById('login-form');
+        const githubTokenInput = document.getElementById('github-token');
+        const submitLoginBtn = document.getElementById('submit-login');
+        const avatarImg = document.getElementById('avatar-img');
+        const defaultAvatar = document.getElementById('default-avatar');
+
+        // API状态弹窗DOM
+        const apiStatusModal = document.getElementById('api-status-modal');
+        const closeModalBtn = document.getElementById('close-modal');
+        const modalUserLogin = document.getElementById('modal-user-login');
+        const modalCoreRemaining = document.getElementById('modal-core-remaining');
+        const modalCoreLimit = document.getElementById('modal-core-limit');
+        const modalCoreReset = document.getElementById('modal-core-reset');
+        const modalSearchRemaining = document.getElementById('modal-search-remaining');
+        const modalSearchLimit = document.getElementById('modal-search-limit');
+        const modalSearchReset = document.getElementById('modal-search-reset');
+        const modalGraphqlRemaining = document.getElementById('modal-graphql-remaining');
+        const modalGraphqlLimit = document.getElementById('modal-graphql-limit');
+
+        // 初始化
+        async function init() {
+            // 检查登录状态
+            checkLoginStatus();
+            // 初始化博客
+            await initBlog();
+            // 绑定事件
+            bindEvents();
+        }
+
+        // 初始化博客
         async function initBlog() {
             try {
-                // 加载配置文件
                 const response = await fetch('blog-config.json');
                 if (!response.ok) throw new Error('配置文件加载失败');
                 
                 const blogConfig = await response.json();
-                
-                // 处理数据：提取所有文章和标签，并获取修改时间
                 await processBlogData(blogConfig);
-                
-                // 渲染标签云和博客卡片
                 renderTags();
                 renderBlogs();
 
-                // 隐藏加载状态，显示内容
                 loadingEl.style.display = 'none';
                 blogContainer.style.display = 'block';
 
@@ -243,22 +461,32 @@
             }
         }
 
-        // 处理博客数据：提取所有文章和标签，获取文件修改时间
+        // 处理博客数据
         async function processBlogData(config) {
-            // 遍历每个分类
             for (const categoryName of Object.keys(config)) {
                 for (const article of config[categoryName]) {
-                    // 获取文件的最后修改时间
                     let lastModified = '未知时间';
                     try {
-                        // 通过GitHub API获取文件最后提交时间
-                        const apiUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/commits?path=${encodeURIComponent(article.path)}&ref=${config.branch}&per_page=1`;
-                        const response = await fetch(apiUrl);
+                        // 尝试使用缓存的token获取修改时间（如果已登录）
+                        const token = localStorage.getItem('githubToken');
+                        let response;
+                        
+                        if (token) {
+                            // 使用认证请求
+                            response = await fetch(
+                                `https://api.github.com/repos/${config.owner}/${config.repo}/commits?path=${encodeURIComponent(article.path)}&ref=${config.branch}&per_page=1`,
+                                { headers: { 'Authorization': `token ${token}` } }
+                            );
+                        } else {
+                            // 未登录时使用匿名请求
+                            response = await fetch(
+                                `https://api.github.com/repos/${config.owner}/${config.repo}/commits?path=${encodeURIComponent(article.path)}&ref=${config.branch}&per_page=1`
+                            );
+                        }
                         
                         if (response.ok) {
                             const commits = await response.json();
                             if (commits.length > 0) {
-                                // 格式化日期为本地时间
                                 const date = new Date(commits[0].commit.committer.date);
                                 lastModified = date.toLocaleString('zh-CN', {
                                     year: 'numeric',
@@ -273,54 +501,40 @@
                         console.warn(`无法获取${article.path}的修改时间:`, err);
                     }
                     
-                    // 给文章添加分类信息和修改时间
                     const articleWithMeta = {
                         ...article,
                         category: categoryName,
                         lastModified: lastModified
                     };
                     
-                    // 添加到所有文章数组
                     allBlogs.push(articleWithMeta);
-                    
-                    // 提取标签到集合（去重）
-                    article.tags.forEach(tag => {
-                        allTags.add(tag);
-                    });
+                    article.tags.forEach(tag => allTags.add(tag));
                 }
             }
         }
 
         // 渲染标签云
         function renderTags() {
-            // 清空标签容器
             tagsContainer.innerHTML = '';
             
-            // 添加"全部"标签（用于取消筛选）
             const allTagEl = document.createElement('span');
             allTagEl.className = 'tag active';
             allTagEl.textContent = '全部';
             allTagEl.addEventListener('click', () => {
-                // 点击"全部"显示所有文章
                 document.querySelectorAll('.tag').forEach(tag => tag.classList.remove('active'));
                 allTagEl.classList.add('active');
                 renderBlogs();
             });
             tagsContainer.appendChild(allTagEl);
             
-            // 渲染所有标签
             Array.from(allTags).forEach(tag => {
                 const tagEl = document.createElement('span');
                 tagEl.className = 'tag';
                 tagEl.textContent = tag;
                 
-                // 点击标签筛选文章
                 tagEl.addEventListener('click', () => {
-                    // 更新标签激活状态
                     document.querySelectorAll('.tag').forEach(t => t.classList.remove('active'));
                     tagEl.classList.add('active');
-                    
-                    // 筛选并渲染该标签的文章
                     renderBlogs(tag);
                 });
                 
@@ -328,17 +542,14 @@
             });
         }
 
-        // 渲染博客卡片（支持按标签筛选）
+        // 渲染博客卡片
         function renderBlogs(filterTag = null) {
-            // 清空容器
             blogContainer.innerHTML = '';
             
-            // 筛选文章（如果有标签筛选）
             const filteredBlogs = filterTag 
                 ? allBlogs.filter(blog => blog.tags.includes(filterTag))
                 : allBlogs;
             
-            // 显示无结果提示
             if (filteredBlogs.length === 0) {
                 noResultsEl.style.display = 'block';
                 return;
@@ -346,7 +557,6 @@
                 noResultsEl.style.display = 'none';
             }
             
-            // 按分类分组显示（相同分类的文章放在一起）
             const blogsByCategory = {};
             filteredBlogs.forEach(blog => {
                 if (!blogsByCategory[blog.category]) {
@@ -355,23 +565,18 @@
                 blogsByCategory[blog.category].push(blog);
             });
             
-            // 遍历分类渲染文章
             Object.keys(blogsByCategory).forEach(categoryName => {
-                // 创建分类区域
                 const categorySection = document.createElement('section');
                 categorySection.className = 'category-section';
                 
-                // 分类标题
                 const categoryTitle = document.createElement('h2');
                 categoryTitle.className = 'category-title';
                 categoryTitle.textContent = categoryName;
                 categorySection.appendChild(categoryTitle);
                 
-                // 卡片容器
                 const cardsContainer = document.createElement('div');
                 cardsContainer.className = 'cards-container';
                 
-                // 为每个文章创建卡片
                 blogsByCategory[categoryName].forEach(article => {
                     const card = createBlogCard(article);
                     cardsContainer.appendChild(card);
@@ -382,21 +587,18 @@
             });
         }
 
-        // 创建单个博客卡片（显示alias和修改时间）
+        // 创建单个博客卡片
         function createBlogCard(article) {
             const card = document.createElement('div');
             card.className = 'blog-card';
             
-            // 卡片标题（使用alias）
             const cardTitle = document.createElement('div');
             cardTitle.className = 'card-title';
-            cardTitle.textContent = article.alias;  // 显示别名而非文件名
+            cardTitle.textContent = article.alias;
             
-            // 卡片标签容器
             const cardTags = document.createElement('div');
             cardTags.className = 'card-tags';
             
-            // 渲染卡片内的标签
             article.tags.forEach(tag => {
                 const tagEl = document.createElement('span');
                 tagEl.className = 'card-tag';
@@ -404,17 +606,14 @@
                 cardTags.appendChild(tagEl);
             });
             
-            // 卡片底部显示修改时间（替代原路径显示）
             const cardMeta = document.createElement('div');
             cardMeta.className = 'card-meta';
             cardMeta.innerHTML = `<i class="fa fa-clock-o"></i> 最后修改: ${article.lastModified}`;
             
-            // 组装卡片
             card.appendChild(cardTitle);
-            card.appendChild(cardTags);  // 添加标签
-            card.appendChild(cardMeta);  // 添加修改时间
+            card.appendChild(cardTags);
+            card.appendChild(cardMeta);
             
-            // 点击卡片跳转
             card.addEventListener('click', () => {
                 window.location.href = article.path;
             });
@@ -422,8 +621,190 @@
             return card;
         }
 
-        // 启动博客
-        initBlog();
+        // 检查登录状态
+        function checkLoginStatus() {
+            const userInfo = JSON.parse(localStorage.getItem('githubUserInfo') || 'null');
+            if (userInfo) {
+                // 已登录状态
+                avatarImg.src = userInfo.avatar_url;
+                avatarImg.style.display = 'block';
+                defaultAvatar.style.display = 'none';
+                
+                // 更新菜单状态
+                loginItem.style.display = 'none';
+                logoutItem.classList.remove('disabled');
+                refreshItem.classList.remove('disabled');
+                apiStatusItem.classList.remove('disabled');
+            } else {
+                // 未登录状态
+                avatarImg.style.display = 'none';
+                defaultAvatar.style.display = 'block';
+                
+                // 更新菜单状态
+                loginItem.style.display = 'flex';
+                logoutItem.classList.add('disabled');
+                refreshItem.classList.add('disabled');
+                apiStatusItem.classList.add('disabled');
+                loginForm.style.display = 'none';
+            }
+        }
+
+        // 登录处理
+        async function handleLogin(token) {
+            try {
+                const octokit = new Octokit({ auth: token });
+                const response = await octokit.rest.users.getAuthenticated();
+                const userInfo = response.data;
+                
+                // 保存token和用户信息
+                localStorage.setItem('githubToken', token);
+                localStorage.setItem('githubUserInfo', JSON.stringify(userInfo));
+                
+                // 更新UI
+                checkLoginStatus();
+                loginForm.style.display = 'none';
+                
+                return true;
+            } catch (err) {
+                alert('登录失败: ' + (err.response?.data?.message || err.message));
+                return false;
+            }
+        }
+
+        // 登出处理
+        function handleLogout() {
+            // 清除缓存
+            localStorage.removeItem('githubToken');
+            localStorage.removeItem('githubUserInfo');
+            
+            // 更新UI
+            checkLoginStatus();
+        }
+
+        // 查询API状态
+        async function queryApiStatus() {
+            const token = localStorage.getItem('githubToken');
+            const userInfo = JSON.parse(localStorage.getItem('githubUserInfo') || 'null');
+            
+            if (!token || !userInfo) return;
+            
+            try {
+                const octokit = new Octokit({ auth: token });
+                const response = await octokit.rest.rateLimit.get();
+                const limitData = response.data;
+                
+                // 填充数据
+                modalUserLogin.textContent = userInfo.login;
+                
+                const core = limitData.resources.core || {};
+                modalCoreRemaining.textContent = core.remaining || 0;
+                modalCoreLimit.textContent = core.limit || 0;
+                modalCoreReset.textContent = core.reset ? formatTimestamp(core.reset) : '-';
+                
+                const search = limitData.resources.search || {};
+                modalSearchRemaining.textContent = search.remaining || 0;
+                modalSearchLimit.textContent = search.limit || 0;
+                modalSearchReset.textContent = search.reset ? formatTimestamp(search.reset) : '-';
+                
+                const graphql = limitData.resources.graphql || {};
+                modalGraphqlRemaining.textContent = graphql.remaining || 0;
+                modalGraphqlLimit.textContent = graphql.limit || 0;
+                
+                // 显示弹窗
+                apiStatusModal.style.display = 'flex';
+            } catch (err) {
+                alert('查询API状态失败: ' + (err.response?.data?.message || err.message));
+            }
+        }
+
+        // 格式化时间戳
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        // 绑定事件
+        function bindEvents() {
+            // 头像点击事件
+            avatarBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                loginMenu.classList.toggle('show');
+            });
+            
+            // 点击页面其他地方关闭菜单
+            document.addEventListener('click', () => {
+                loginMenu.classList.remove('show');
+            });
+            
+            // 登录项点击
+            loginItem.addEventListener('click', (e) => {
+                e.stopPropagation();
+                loginForm.style.display = loginForm.style.display === 'none' ? 'block' : 'none';
+                if (loginForm.style.display === 'block') {
+                    githubTokenInput.focus();
+                }
+            });
+            
+            // 提交登录
+            submitLoginBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const token = githubTokenInput.value.trim();
+                if (token) {
+                    await handleLogin(token);
+                    githubTokenInput.value = '';
+                } else {
+                    alert('请输入GitHub Token');
+                }
+            });
+            
+            // 登出项点击
+            logoutItem.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!logoutItem.classList.contains('disabled')) {
+                    handleLogout();
+                    loginMenu.classList.remove('show');
+                }
+            });
+            
+            // 刷新项点击
+            refreshItem.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!refreshItem.classList.contains('disabled')) {
+                    window.location.reload();
+                }
+            });
+            
+            // API状态项点击
+            apiStatusItem.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (!apiStatusItem.classList.contains('disabled')) {
+                    await queryApiStatus();
+                    loginMenu.classList.remove('show');
+                }
+            });
+            
+            // 关闭弹窗
+            closeModalBtn.addEventListener('click', () => {
+                apiStatusModal.style.display = 'none';
+            });
+            
+            // 点击弹窗外部关闭
+            apiStatusModal.addEventListener('click', (e) => {
+                if (e.target === apiStatusModal) {
+                    apiStatusModal.style.display = 'none';
+                }
+            });
+        }
+
+        // 启动
+        init();
     </script>
 </body>
 </html>
