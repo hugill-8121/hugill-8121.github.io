@@ -124,6 +124,14 @@ async function batchGetFileCommits(owner, repo, paths, branch, token, perPage = 
     }));
 }
 
+export {
+    Octokit,
+    getFileCommits,
+    getUserInfo,
+    getRateLimit,
+    batchGetFileCommits
+};
+
 /**
  * 获取当前认证用户的信息
  * @param {string} token - GitHub Token
@@ -150,5 +158,6 @@ export {
     Octokit,
     getFileCommits,
     getUserInfo,
-    getRateLimit
+    getRateLimit,
+    batchGetFileCommits
 };
