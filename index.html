@@ -3,9 +3,181 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>这里是云风青的blog</title>
+    <title>云风青的技术博客</title>
     <link rel="stylesheet" href="./css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <style>
+        /* 基础样式补充 */
+        .blog-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 0.5rem;
+            min-width: 280px;
+            max-width: 350px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+        .blog-card:hover {
+            transform: translateY(-3px);
+        }
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #111827;
+        }
+        .card-tags {
+            margin-bottom: 0.5rem;
+        }
+        .card-tag {
+            display: inline-block;
+            background: #f3f4f6;
+            padding: 0.2rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-right: 0.3rem;
+            color: #4b5563;
+        }
+        .cards-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            justify-content: center;
+        }
+        .category-section {
+            margin: 2rem 0;
+        }
+        .category-title {
+            color: #1e40af;
+            border-bottom: 2px solid #3b82f6;
+            padding-bottom: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .login-container {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .avatar-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            overflow: hidden;
+            cursor: pointer;
+            border: 2px solid #e5e7eb;
+        }
+        .avatar-img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .login-menu {
+            position: absolute;
+            top: 60px;
+            right: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 0.5rem 0;
+            display: none;
+            min-width: 180px;
+        }
+        .login-menu.show {
+            display: block;
+        }
+        .menu-item {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .menu-item:hover {
+            background: #f3f4f6;
+        }
+        .menu-item.disabled {
+            color: #9ca3af;
+            cursor: not-allowed;
+        }
+        .menu-divider {
+            height: 1px;
+            background: #e5e7eb;
+            margin: 0.5rem 0;
+        }
+        .token-input {
+            width: 100%;
+            padding: 0.5rem;
+            margin: 0.5rem 0;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+        }
+        .login-btn {
+            width: 100%;
+            padding: 0.5rem;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #6b7280;
+        }
+        .tag-cloud {
+            margin: 2rem 0;
+            text-align: center;
+        }
+        .tag {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            margin: 0.3rem;
+            background: #f3f4f6;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tag.active {
+            background: #3b82f6;
+            color: white;
+        }
+        .api-status-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        .modal-content {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+        }
+        .info-item {
+            margin: 0.8rem 0;
+            padding: 0.3rem 0;
+            border-bottom: 1px dashed #e5e7eb;
+        }
+        .close-modal {
+            margin-top: 1rem;
+            padding: 0.5rem 1rem;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
     <!-- 博客配置 -->
@@ -50,7 +222,7 @@
     </header>
 
     <!-- 调试信息区域 -->
-    <div id="debug-info" style="display: block; margin: 1rem 0; padding: 1rem; background: #f8f9fa; border-radius: 4px; font-size: 0.9rem;">
+    <div id="debug-info" style="display: block; margin: 1rem 0; padding: 1rem; background: #f8f9fa; border-radius: 4px; font-size: 0.9rem; max-height: 200px; overflow-y: auto;">
         <h4 style="margin-top: 0; color: #dc3545;">调试信息：</h4>
         <pre id="debug-log"></pre>
     </div>
@@ -64,7 +236,38 @@
     <div id="blog-container" style="display: none;"></div>
     <div class="no-results" id="no-results" style="display: none;">没有找到匹配标签的文章</div>
 
-    <!-- 引入JavaScript模块 -->
+    <!-- API状态弹窗 -->
+    <div class="api-status-modal" id="api-status-modal">
+        <div class="modal-content">
+            <h3 class="modal-title">API 限流状态</h3>
+            <div class="info-item">
+                <strong>用户名：</strong>
+                <span id="modal-user-login">-</span>
+            </div>
+            <div class="info-item">
+                <strong>Core API 剩余次数：</strong>
+                <span id="modal-core-remaining">-</span> / <span id="modal-core-limit">-</span>
+            </div>
+            <div class="info-item">
+                <strong>Core API 重置时间：</strong>
+                <span id="modal-core-reset">-</span>
+            </div>
+            <div class="info-item">
+                <strong>Search API 剩余次数：</strong>
+                <span id="modal-search-remaining">-</span> / <span id="modal-search-limit">-</span>
+            </div>
+            <div class="info-item">
+                <strong>Search API 重置时间：</strong>
+                <span id="modal-search-reset">-</span>
+            </div>
+            <div class="info-item">
+                <strong>GraphQL API 剩余次数：</strong>
+                <span id="modal-graphql-remaining">-</span> / <span id="modal-graphql-limit">-</span>
+            </div>
+            <button class="close-modal" id="close-modal">关闭</button>
+        </div>
+    </div>
+
     <script type="module" src="./js/github-api.js"></script>
     <script type="module">
         import { 
@@ -73,50 +276,53 @@
             getRateLimit 
         } from './js/github-api.js';
 
-        // -------------------------- 核心修改：从URL自动解析配置 --------------------------
+        // 核心配置：自动解析或手动配置GitHub信息
         let config = {};
         try {
-            // 1. 获取当前页面的URL主机名（如 "hugill-8121.github.io"）
+            // 1. 从当前URL解析（GitHub Pages格式：用户名.github.io）
             const hostname = window.location.hostname;
-            logDebug(`当前页面主机名: ${hostname}`);
-
-            // 2. 解析GitHub Pages域名格式：用户名.github.io
             const githubPagesRegex = /^([a-zA-Z0-9_-]+)\.github\.io$/;
             const match = hostname.match(githubPagesRegex);
 
-            if (match && match.length >= 2) {
-                // 提取用户名（owner）和仓库名（repo）
-                const owner = match[1]; // 第一个分组：用户名（如 "hugill-8121"）
-                const repo = `${owner}.github.io`; // 仓库名固定为 "用户名.github.io"
-                const branch = 'main'; // GitHub Pages默认分支（通常为main或master，这里默认main）
-
-                config = { owner, repo, branch };
-                logDebug(`从URL解析配置成功: ${JSON.stringify(config)}`);
-            } else {
-                // 非GitHub Pages域名时，使用默认配置（可手动修改）
+            if (match && match[1]) {
+                // 解析成功：使用URL中的信息
                 config = {
-                    owner: 'hugill-8121',
-                    repo: 'hugill-8121.github.io',
-                    branch: 'main'
+                    owner: match[1],
+                    repo: `${match[1]}.github.io`,
+                    branch: "main"
                 };
-                logDebug(`非GitHub Pages域名，使用默认配置: ${JSON.stringify(config)}`);
+                logDebug(`✅ 从URL解析配置成功: ${JSON.stringify(config)}`, "success");
+            } else {
+                // 2. 非GitHub Pages环境，使用手动配置
+                config = {
+                    owner: "hugill-8121",       // 替换为你的GitHub用户名
+                    repo: "hugill-8121.github.io", // 替换为你的仓库名
+                    branch: "main"
+                };
+                logDebug(`ℹ️ 非GitHub Pages环境，使用手动配置: ${JSON.stringify(config)}`, "info");
             }
+
+            // 3. 验证配置是否有效（防止占位符）
+            if (config.owner.includes("your-github-username") || config.repo.includes("your-repo-name")) {
+                throw new Error("配置中存在默认占位符，请替换为实际值！");
+            }
+
         } catch (err) {
-            // 解析失败时，使用默认配置兜底
+            // 4. 解析失败时强制使用正确配置
             config = {
-                owner: 'hugill-8121',
-                repo: 'hugill-8121.github.io',
-                branch: 'main'
+                owner: "hugill-8121",
+                repo: "hugill-8121.github.io",
+                branch: "main"
             };
-            logDebug(`URL解析失败，使用默认配置: ${err.message}`);
+            logDebug(`❌ URL解析失败，强制使用兜底配置: ${JSON.stringify(config)}，错误: ${err.message}`, "error");
         }
-        // -----------------------------------------------------------------------------
+        logDebug(`🎯 最终生效配置: ${JSON.stringify(config)}`, "success");
 
         // 存储博客数据
         let allBlogs = [];
         let allTags = new Set();
 
-        // DOM元素（保持不变）
+        // DOM元素
         const blogContainer = document.getElementById('blog-container');
         const tagsContainer = document.getElementById('tags-container');
         const noResultsEl = document.getElementById('no-results');
@@ -126,7 +332,7 @@
         const debugInfo = document.getElementById('debug-info');
         const debugLog = document.getElementById('debug-log');
 
-        // 登录相关DOM（保持不变）
+        // 登录相关DOM
         const avatarBtn = document.getElementById('avatar-btn');
         const loginMenu = document.getElementById('login-menu');
         const loginItem = document.getElementById('login-item');
@@ -140,7 +346,7 @@
         const defaultAvatar = document.getElementById('default-avatar');
         const usernameDisplay = document.getElementById('username-display');
 
-        // API状态弹窗DOM（保持不变）
+        // API状态弹窗DOM
         const apiStatusModal = document.getElementById('api-status-modal');
         const closeModalBtn = document.getElementById('close-modal');
         const modalUserLogin = document.getElementById('modal-user-login');
@@ -153,7 +359,7 @@
         const modalGraphqlRemaining = document.getElementById('modal-graphql-remaining');
         const modalGraphqlLimit = document.getElementById('modal-graphql-limit');
 
-        // 初始化（保持不变）
+        // 初始化
         async function init() {
             loadBlogSettings();
             logDebug('初始化开始...');
@@ -162,7 +368,487 @@
             bindEvents();
         }
 
-        // 其他函数（loadBlogSettings、logDebug、loadBlogData等）保持不变...
+        // 加载博客配置
+        function loadBlogSettings() {
+            try {
+                const settingsEl = document.getElementById('blog-settings');
+                const settings = JSON.parse(settingsEl.textContent);
+                if (settings.title) blogTitle.textContent = settings.title;
+                if (settings.introduction) blogIntro.textContent = settings.introduction;
+                logDebug('博客配置加载成功: ' + JSON.stringify(settings));
+            } catch (err) {
+                logDebug('加载博客配置失败: ' + err.message, 'error');
+            }
+        }
+
+        // 记录调试信息
+        function logDebug(message, level = 'info') {
+            const time = new Date().toLocaleTimeString();
+            const levels = {
+                info: '🔵',
+                warn: '🟡',
+                error: '🔴',
+                success: '🟢'
+            };
+            const prefix = levels[level] || '⚪';
+            debugLog.textContent += `[${time}] ${prefix} ${message}\n`;
+            debugLog.scrollTop = debugLog.scrollHeight;
+        }
+
+        // 加载博客数据
+        async function loadBlogData() {
+            try {
+                // 1. 加载博客配置文件
+                logDebug('开始加载blog-config.json...');
+                const response = await fetch('blog-config.json');
+                if (!response.ok) {
+                    throw new Error(`blog-config.json加载失败，状态码: ${response.status}`);
+                }
+                const blogConfig = await response.json();
+                logDebug(`blog-config.json加载成功，包含${Object.keys(blogConfig).length}个分类`);
+
+                // 2. 尝试从缓存加载
+                const cachedBlogs = localStorage.getItem('cachedBlogs');
+                if (cachedBlogs) {
+                    allBlogs = JSON.parse(cachedBlogs);
+                    logDebug(`从缓存加载了${allBlogs.length}篇博客数据`);
+                }
+
+                // 3. 提取所有文件路径
+                const filePaths = [];
+                for (const categoryName of Object.keys(blogConfig)) {
+                    for (const article of blogConfig[categoryName]) {
+                        filePaths.push(article.path);
+                    }
+                }
+                logDebug(`共需要查询${filePaths.length}个文件的提交信息`);
+
+                // 4. 使用GraphQL批量查询
+                const token = localStorage.getItem('githubToken');
+                const commitMap = await fetchFileCommitsViaGraphQL(
+                    config.owner,
+                    config.repo,
+                    config.branch,
+                    filePaths,
+                    token
+                );
+                logDebug(`成功获取${Object.keys(commitMap).length}个文件的提交信息`);
+
+                // 5. 处理博客数据
+                processBlogData(blogConfig, commitMap);
+
+                loadingEl.style.display = 'none';
+                blogContainer.style.display = 'block';
+
+            } catch (error) {
+                logDebug('加载博客数据失败: ' + error.message, 'error');
+                loadingEl.innerHTML = `<p style="color: red;">加载失败: ${error.message}</p>`;
+                if (allBlogs.length > 0) {
+                    loadingEl.style.display = 'none';
+                    blogContainer.style.display = 'block';
+                    renderTags();
+                    renderBlogs();
+                }
+            }
+        }
+
+        // 处理博客数据
+        function processBlogData(blogConfig, commitMap) {
+            const newBlogs = [];
+            const newTags = new Set();
+
+            logDebug('开始处理博客数据', 'info');
+            logDebug(`commitMap 包含 ${Object.keys(commitMap).length} 条记录`, 'info');
+            
+            // 打印commitMap内容
+            logDebug('commitMap 详细数据:', 'info');
+            Object.entries(commitMap).forEach(([path, info]) => {
+                logDebug(`  ${path}: ${JSON.stringify(info)}`, 'info');
+            });
+
+            for (const categoryName of Object.keys(blogConfig)) {
+                logDebug(`处理分类: ${categoryName}`, 'info');
+                
+                for (const article of blogConfig[categoryName]) {
+                    if (!commitMap.hasOwnProperty(article.path)) {
+                        logDebug(`警告: 文章路径 ${article.path} 不在commitMap中`, 'warn');
+                    }
+                    
+                    const commitInfo = commitMap[article.path] || {
+                        lastModified: '未知时间',
+                        commitAuthor: '未知作者',
+                        commitMessage: '无提交信息'
+                    };
+                    logDebug(
+                        `处理文章 ${article.alias}: 时间=${commitInfo.lastModified}, 作者=${commitInfo.commitAuthor}, 提交信息=${commitInfo.commitMessage}`,
+                        commitInfo.lastModified === '未知时间' ? 'warn' : 'success'
+                    );
+                    
+                    const articleWithMeta = {
+                        ...article,
+                        category: categoryName,
+                        lastModified: commitInfo.lastModified,
+                        commitAuthor: commitInfo.commitAuthor,
+                        commitMessage: commitInfo.commitMessage
+                    };
+                    
+                    newBlogs.push(articleWithMeta);
+                    article.tags.forEach(tag => newTags.add(tag));
+                }
+            }
+
+            allBlogs = newBlogs;
+            allTags = newTags;
+            localStorage.setItem('cachedBlogs', JSON.stringify(allBlogs));
+            localStorage.setItem('cachedTags', JSON.stringify(Array.from(allTags)));
+            logDebug(`数据处理完成，共${allBlogs.length}篇博客`, 'success');
+
+            renderTags();
+            renderBlogs();
+        }
+
+        // 渲染标签云
+        function renderTags() {
+            tagsContainer.innerHTML = '';
+            
+            const allTagEl = document.createElement('span');
+            allTagEl.className = 'tag active';
+            allTagEl.textContent = '全部';
+            allTagEl.addEventListener('click', () => {
+                document.querySelectorAll('.tag').forEach(tag => tag.classList.remove('active'));
+                allTagEl.classList.add('active');
+                renderBlogs();
+            });
+            tagsContainer.appendChild(allTagEl);
+            
+            Array.from(allTags).forEach(tag => {
+                const tagEl = document.createElement('span');
+                tagEl.className = 'tag';
+                tagEl.textContent = tag;
+                
+                tagEl.addEventListener('click', () => {
+                    document.querySelectorAll('.tag').forEach(t => t.classList.remove('active'));
+                    tagEl.classList.add('active');
+                    renderBlogs(tag);
+                });
+                
+                tagsContainer.appendChild(tagEl);
+            });
+        }
+
+        // 渲染博客卡片
+        function renderBlogs(filterTag = null) {
+            blogContainer.innerHTML = '';
+            
+            const filteredBlogs = filterTag 
+                ? allBlogs.filter(blog => blog.tags.includes(filterTag))
+                : allBlogs;
+            
+            if (filteredBlogs.length === 0) {
+                noResultsEl.style.display = 'block';
+                return;
+            } else {
+                noResultsEl.style.display = 'none';
+            }
+            
+            const blogsByCategory = {};
+            filteredBlogs.forEach(blog => {
+                if (!blogsByCategory[blog.category]) {
+                    blogsByCategory[blog.category] = [];
+                }
+                blogsByCategory[blog.category].push(blog);
+            });
+            
+            Object.keys(blogsByCategory).forEach(categoryName => {
+                const categorySection = document.createElement('section');
+                categorySection.className = 'category-section';
+                
+                const categoryTitle = document.createElement('h2');
+                categoryTitle.className = 'category-title';
+                categoryTitle.textContent = categoryName;
+                categorySection.appendChild(categoryTitle);
+                
+                const cardsContainer = document.createElement('div');
+                cardsContainer.className = 'cards-container';
+                
+                blogsByCategory[categoryName].forEach(article => {
+                    const card = createBlogCard(article);
+                    cardsContainer.appendChild(card);
+                });
+                
+                categorySection.appendChild(cardsContainer);
+                blogContainer.appendChild(categorySection);
+            });
+        }
+
+        // 创建单个博客卡片（修复换行显示）
+        function createBlogCard(article) {
+            const card = document.createElement('div');
+            card.className = 'blog-card';
+            
+            // 文章标题
+            const cardTitle = document.createElement('div');
+            cardTitle.className = 'card-title';
+            cardTitle.textContent = article.alias;
+            
+            // 标签
+            const cardTags = document.createElement('div');
+            cardTags.className = 'card-tags';
+            
+            article.tags.forEach(tag => {
+                const tagEl = document.createElement('span');
+                tagEl.className = 'card-tag';
+                tagEl.textContent = tag;
+                cardTags.appendChild(tagEl);
+            });
+            
+            // 提交信息（限制长度）
+            const shortMessage = article.commitMessage.length > 40 
+                ? article.commitMessage.substring(0, 40) + '...' 
+                : article.commitMessage;
+            
+            // 元数据（强制换行）
+            const cardMeta = document.createElement('div');
+            cardMeta.className = 'card-meta';
+            cardMeta.style.cssText = `
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                font-size: 0.85rem;
+                color: #6b7280;
+                margin-top: 12px;
+                padding-top: 12px;
+                border-top: 1px dashed #e5e7eb;
+            `;
+            
+            // 分别创建三个元数据元素（确保换行）
+            const authorEl = document.createElement('div');
+            authorEl.innerHTML = `<i class="fa fa-user" style="margin-right: 6px;"></i> 作者: ${article.commitAuthor}`;
+            
+            const timeEl = document.createElement('div');
+            timeEl.innerHTML = `<i class="fa fa-clock-o" style="margin-right: 6px;"></i> 最后修改: ${article.lastModified}`;
+            
+            const messageEl = document.createElement('div');
+            messageEl.innerHTML = `<i class="fa fa-comment" style="margin-right: 6px;"></i> 提交信息: ${shortMessage}`;
+            
+            cardMeta.appendChild(authorEl);
+            cardMeta.appendChild(timeEl);
+            cardMeta.appendChild(messageEl);
+            
+            card.appendChild(cardTitle);
+            card.appendChild(cardTags);
+            card.appendChild(cardMeta);
+            
+            card.addEventListener('click', () => {
+                window.location.href = article.path;
+            });
+            
+            return card;
+        }
+
+        // 检查登录状态
+        function checkLoginStatus() {
+            const userInfo = JSON.parse(localStorage.getItem('githubUserInfo') || 'null');
+            const token = localStorage.getItem('githubToken');
+            
+            logDebug(`检查登录状态: ${!!userInfo}`, 'info');
+            
+            if (userInfo && token) {
+                // 已登录状态
+                usernameDisplay.textContent = userInfo.login;
+                usernameDisplay.style.display = 'inline';
+                avatarImg.src = userInfo.avatar_url;
+                avatarImg.style.display = 'block';
+                defaultAvatar.style.display = 'none';
+                
+                // 更新菜单状态
+                loginItem.style.display = 'none';
+                logoutItem.classList.remove('disabled');
+                refreshItem.classList.remove('disabled');
+                apiStatusItem.classList.remove('disabled');
+
+            } else {
+                // 未登录状态
+                usernameDisplay.style.display = 'none';
+                avatarImg.style.display = 'none';
+                defaultAvatar.style.display = 'block';
+                
+                // 更新菜单状态
+                loginItem.style.display = 'flex';
+                logoutItem.classList.add('disabled');
+                refreshItem.classList.add('disabled');
+                apiStatusItem.classList.add('disabled');
+                loginForm.style.display = 'none';
+            }
+        }
+
+        // 刷新博客数据
+        async function refreshBlogDataFromConfig() {
+            try {
+                logDebug('手动刷新博客数据...', 'info');
+                loadingEl.style.display = 'block';
+                blogContainer.style.display = 'none';
+                await loadBlogData();
+                loadingEl.style.display = 'none';
+                blogContainer.style.display = 'block';
+            } catch (err) {
+                logDebug('刷新失败: ' + err.message, 'error');
+                alert('刷新失败: ' + err.message);
+                loadingEl.style.display = 'none';
+                blogContainer.style.display = 'block';
+            }
+        }
+
+        // 登录处理
+        async function handleLogin(token) {
+            try {
+                logDebug('尝试登录...', 'info');
+                const userInfo = await getUserInfo(token);
+                
+                // 保存登录信息
+                localStorage.setItem('githubToken', token);
+                localStorage.setItem('githubUserInfo', JSON.stringify(userInfo));
+                logDebug(`登录成功，用户: ${userInfo.login}`, 'success');
+                
+                // 更新状态并刷新数据
+                checkLoginStatus();
+                loginForm.style.display = 'none';
+                await refreshBlogDataFromConfig();
+                return true;
+            } catch (err) {
+                const errorMsg = err.message;
+                logDebug('登录失败: ' + errorMsg, 'error');
+                alert('登录失败: ' + errorMsg);
+                return false;
+            }
+        }
+
+        // 登出处理
+        function handleLogout() {
+            logDebug('执行登出...', 'info');
+            localStorage.removeItem('githubToken');
+            localStorage.removeItem('githubUserInfo');
+            checkLoginStatus();
+        }
+
+        // 查询API状态
+        async function queryApiStatus() {
+            const token = localStorage.getItem('githubToken');
+            const userInfo = JSON.parse(localStorage.getItem('githubUserInfo') || 'null');
+            
+            if (!token || !userInfo) return;
+            
+            try {
+                const limitData = await getRateLimit(token);
+                
+                modalUserLogin.textContent = userInfo.login;
+                
+                const core = limitData.resources.core || {};
+                modalCoreRemaining.textContent = core.remaining || 0;
+                modalCoreLimit.textContent = core.limit || 0;
+                modalCoreReset.textContent = core.reset ? formatTimestamp(core.reset) : '-';
+                
+                const search = limitData.resources.search || {};
+                modalSearchRemaining.textContent = search.remaining || 0;
+                modalSearchLimit.textContent = search.limit || 0;
+                modalSearchReset.textContent = search.reset ? formatTimestamp(search.reset) : '-';
+                
+                const graphql = limitData.resources.graphql || {};
+                modalGraphqlRemaining.textContent = graphql.remaining || 0;
+                modalGraphqlLimit.textContent = graphql.limit || 0;
+                
+                apiStatusModal.style.display = 'flex';
+            } catch (err) {
+                alert('查询API状态失败: ' + err.message);
+            }
+        }
+
+        // 格式化时间戳
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        // 绑定事件
+        function bindEvents() {
+            // 头像点击
+            avatarBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                loginMenu.classList.toggle('show');
+            });
+            
+            // 点击其他区域关闭菜单
+            document.addEventListener('click', () => {
+                loginMenu.classList.remove('show');
+            });
+            
+            // 登录项点击
+            loginItem.addEventListener('click', (e) => {
+                e.stopPropagation();
+                loginForm.style.display = loginForm.style.display === 'none' ? 'block' : 'none';
+                if (loginForm.style.display === 'block') {
+                    githubTokenInput.focus();
+                }
+            });
+            
+            // 提交登录
+            submitLoginBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const token = githubTokenInput.value.trim();
+                if (token) {
+                    await handleLogin(token);
+                    githubTokenInput.value = '';
+                } else {
+                    alert('请输入GitHub Token');
+                }
+            });
+            
+            // 登出项点击
+            logoutItem.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!logoutItem.classList.contains('disabled')) {
+                    handleLogout();
+                    loginMenu.classList.remove('show');
+                }
+            });
+            
+            // 刷新博客数据
+            refreshItem.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (!refreshItem.classList.contains('disabled')) {
+                    await refreshBlogDataFromConfig();
+                    loginMenu.classList.remove('show');
+                }
+            });
+            
+            // API状态查询
+            apiStatusItem.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (!apiStatusItem.classList.contains('disabled')) {
+                    await queryApiStatus();
+                    loginMenu.classList.remove('show');
+                }
+            });
+            
+            // 关闭弹窗
+            closeModalBtn.addEventListener('click', () => {
+                apiStatusModal.style.display = 'none';
+            });
+            
+            // 点击弹窗外部关闭
+            apiStatusModal.addEventListener('click', (e) => {
+                if (e.target === apiStatusModal) {
+                    apiStatusModal.style.display = 'none';
+                }
+            });
+        }
 
         // 启动
         init();
