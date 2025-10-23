@@ -3,318 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>这里是云风青的blog</title> <!-- 修改网页标题 -->
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', sans-serif;
-        }
-
-        body {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem 1rem;
-            background-color: #f0f2f5;
-        }
-
-        header {
-            text-align: center;
-            margin-bottom: 3rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid #e5e7eb;
-            position: relative;
-        }
-
-        /* 登录相关样式 */
-        .login-container {
-            position: absolute;
-            top: 0;
-            right: 0;
-            display: flex;
-            align-items: center;
-            gap: 0.8rem; /* 用户名和头像间距 */
-            padding: 0.5rem;
-        }
-
-        .username-display {
-            color: #1f2937;
-            font-weight: 500;
-            display: none; /* 未登录时隐藏 */
-        }
-
-        .avatar-btn {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            border: 2px solid #e5e7eb;
-            cursor: pointer;
-            transition: all 0.2s;
-            background-color: #f1f5f9;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-
-        .avatar-btn:hover {
-            border-color: #3b82f6;
-        }
-
-        .avatar-img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .login-menu {
-            position: absolute;
-            top: 50px;
-            right: 0;
-            width: 200px;
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            padding: 0.5rem 0;
-            display: none;
-            z-index: 100;
-        }
-
-        .login-menu.show {
-            display: block;
-        }
-
-        .menu-item {
-            padding: 0.8rem 1rem;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .menu-item:hover {
-            background-color: #f1f5f9;
-        }
-
-        .menu-item.disabled {
-            color: #9ca3af;
-            cursor: not-allowed;
-            background-color: transparent;
-        }
-
-        .menu-divider {
-            height: 1px;
-            background-color: #e5e7eb;
-            margin: 0.5rem 0;
-        }
-
-        .token-input {
-            width: 100%;
-            padding: 0.5rem;
-            margin: 0.5rem 0;
-            border: 1px solid #e5e7eb;
-            border-radius: 4px;
-            font-size: 0.9rem;
-        }
-
-        .login-btn {
-            width: 100%;
-            background-color: #3b82f6;
-            color: white;
-            border: none;
-            padding: 0.5rem;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-
-        .login-btn:hover {
-            background-color: #2563eb;
-        }
-
-        .api-status-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0,0,0,0.5);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-
-        .modal-content {
-            background-color: white;
-            border-radius: 8px;
-            width: 90%;
-            max-width: 600px;
-            max-height: 80vh;
-            overflow-y: auto;
-            padding: 1.5rem;
-        }
-
-        .modal-title {
-            font-size: 1.2rem;
-            margin-bottom: 1rem;
-            color: #1f2937;
-        }
-
-        .close-modal {
-            background-color: #ef4444;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-top: 1rem;
-        }
-
-        /* 博客主样式 */
-        h1 {
-            color: #111827;
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
-        }
-
-        .header-desc {
-            color: #6b7280;
-            font-size: 1.1rem;
-        }
-
-        .tag-cloud {
-            margin: 2rem 0 3rem;
-            padding: 1.5rem;
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        }
-
-        .tag-cloud h2 {
-            color: #1f2937;
-            font-size: 1.3rem;
-            margin-bottom: 1rem;
-        }
-
-        .tags-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.8rem;
-        }
-
-        .tag {
-            background-color: #eff6ff;
-            color: #1e40af;
-            padding: 0.4rem 0.8rem;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .tag:hover, .tag.active {
-            background-color: #1e40af;
-            color: white;
-        }
-
-        .category-section {
-            margin-bottom: 4rem;
-        }
-
-        .category-title {
-            color: #1f2937;
-            font-size: 1.6rem;
-            margin-bottom: 1.5rem;
-            padding-left: 0.75rem;
-            border-left: 4px solid #3b82f6;
-        }
-
-        .cards-container {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 2rem;
-        }
-
-        .blog-card {
-            background-color: white;
-            border-radius: 8px;
-            padding: 1.5rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            cursor: pointer;
-        }
-
-        .blog-card:hover {
-            transform: scale(1.04);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-        }
-
-        .card-title {
-            color: #1e40af;
-            font-size: 1.3rem;
-            margin-bottom: 1rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .card-tags {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-            margin: 1rem 0;
-        }
-
-        .card-tag {
-            background-color: #f1f5f9;
-            color: #475569;
-            padding: 0.2rem 0.6rem;
-            border-radius: 4px;
-            font-size: 0.8rem;
-        }
-
-        .card-meta {
-            color: #6b7280;
-            font-size: 0.9rem;
-            padding-top: 0.5rem;
-            border-top: 1px dashed #e5e7eb;
-            display: flex;
-            align-items: center;
-        }
-
-        .card-meta i {
-            margin-right: 0.3rem;
-            font-size: 0.8rem;
-        }
-
-        @media (max-width: 768px) {
-            .cards-container {
-                grid-template-columns: 1fr;
-            }
-            .username-display {
-                display: none; /* 移动端隐藏用户名，节省空间 */
-            }
-        }
-
-        .no-results {
-            text-align: center;
-            padding: 3rem;
-            color: #6b7280;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 5rem 2rem;
-            color: #4b5563;
-        }
-    </style>
+    <title>这里是云风青的blog</title>
+    <!-- 引入本地CSS文件 -->
+    <link rel="stylesheet" href="./css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
 </head>
 <body>
-    <!-- 配置信息（供JS读取） -->
+    <!-- 配置信息 -->
     <script id="blog-settings" type="application/json">
         {"title":"云风青的技术博客","introduction":"欢迎来到云风青的blog！这里分享技术心得和学习笔记"}
     </script>
@@ -325,7 +20,7 @@
         
         <!-- 登录相关元素 -->
         <div class="login-container">
-            <span class="username-display" id="username-display"></span> <!-- 用户名显示 -->
+            <span class="username-display" id="username-display"></span>
             <div class="avatar-btn" id="avatar-btn">
                 <img src="" alt="用户头像" class="avatar-img" id="avatar-img" style="display: none;">
                 <i class="fa fa-user" id="default-avatar" style="color: #6b7280;"></i>
@@ -396,11 +91,10 @@
     <div id="blog-container" style="display: none;"></div>
     <div class="no-results" id="no-results" style="display: none;">没有找到匹配标签的文章</div>
 
-    <!-- 引入GitHub API封装和主逻辑 -->
+    <!-- 引入JavaScript模块 -->
     <script type="module" src="./js/github-api.js"></script>
     <script type="module">
         import { 
-            Octokit, 
             getFileCommits, 
             getUserInfo, 
             getRateLimit 
@@ -454,13 +148,13 @@
 
         // 初始化
         async function init() {
-            loadBlogSettings(); // 加载博客配置
-            checkLoginStatus(); // 检查登录状态
-            await initBlog();   // 初始化博客内容
-            bindEvents();       // 绑定事件
+            loadBlogSettings();
+            checkLoginStatus();
+            await initBlog();
+            bindEvents();
         }
 
-        // 加载博客标题和介绍（从配置中读取）
+        // 加载博客配置
         function loadBlogSettings() {
             try {
                 const settingsEl = document.getElementById('blog-settings');
@@ -499,7 +193,6 @@
                     let lastModified = '未知时间';
                     try {
                         const token = localStorage.getItem('githubToken');
-                        // 调用封装的API获取提交记录
                         const commits = await getFileCommits(
                             config.owner, 
                             config.repo, 
@@ -646,25 +339,21 @@
         function checkLoginStatus() {
             const userInfo = JSON.parse(localStorage.getItem('githubUserInfo') || 'null');
             if (userInfo) {
-                // 已登录状态
-                usernameDisplay.textContent = userInfo.login; // 显示用户名
-                usernameDisplay.style.display = 'inline';      // 显示用户名元素
+                usernameDisplay.textContent = userInfo.login;
+                usernameDisplay.style.display = 'inline';
                 avatarImg.src = userInfo.avatar_url;
                 avatarImg.style.display = 'block';
                 defaultAvatar.style.display = 'none';
                 
-                // 更新菜单状态
                 loginItem.style.display = 'none';
                 logoutItem.classList.remove('disabled');
                 refreshItem.classList.remove('disabled');
                 apiStatusItem.classList.remove('disabled');
             } else {
-                // 未登录状态
-                usernameDisplay.style.display = 'none'; // 隐藏用户名
+                usernameDisplay.style.display = 'none';
                 avatarImg.style.display = 'none';
                 defaultAvatar.style.display = 'block';
                 
-                // 更新菜单状态
                 loginItem.style.display = 'flex';
                 logoutItem.classList.add('disabled');
                 refreshItem.classList.add('disabled');
@@ -676,14 +365,11 @@
         // 登录处理
         async function handleLogin(token) {
             try {
-                // 调用封装的API获取用户信息
                 const userInfo = await getUserInfo(token);
                 
-                // 保存token和用户信息
                 localStorage.setItem('githubToken', token);
                 localStorage.setItem('githubUserInfo', JSON.stringify(userInfo));
                 
-                // 更新UI
                 checkLoginStatus();
                 loginForm.style.display = 'none';
                 
@@ -696,11 +382,8 @@
 
         // 登出处理
         function handleLogout() {
-            // 清除缓存
             localStorage.removeItem('githubToken');
             localStorage.removeItem('githubUserInfo');
-            
-            // 更新UI
             checkLoginStatus();
         }
 
@@ -712,10 +395,8 @@
             if (!token || !userInfo) return;
             
             try {
-                // 调用封装的API获取限流信息
                 const limitData = await getRateLimit(token);
                 
-                // 填充数据
                 modalUserLogin.textContent = userInfo.login;
                 
                 const core = limitData.resources.core || {};
@@ -732,7 +413,6 @@
                 modalGraphqlRemaining.textContent = graphql.remaining || 0;
                 modalGraphqlLimit.textContent = graphql.limit || 0;
                 
-                // 显示弹窗
                 apiStatusModal.style.display = 'flex';
             } catch (err) {
                 alert('查询API状态失败: ' + (err.response?.data?.message || err.message));
@@ -754,18 +434,15 @@
 
         // 绑定事件
         function bindEvents() {
-            // 头像点击事件
             avatarBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 loginMenu.classList.toggle('show');
             });
             
-            // 点击页面其他地方关闭菜单
             document.addEventListener('click', () => {
                 loginMenu.classList.remove('show');
             });
             
-            // 登录项点击
             loginItem.addEventListener('click', (e) => {
                 e.stopPropagation();
                 loginForm.style.display = loginForm.style.display === 'none' ? 'block' : 'none';
@@ -774,7 +451,6 @@
                 }
             });
             
-            // 提交登录
             submitLoginBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const token = githubTokenInput.value.trim();
@@ -786,7 +462,6 @@
                 }
             });
             
-            // 登出项点击
             logoutItem.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (!logoutItem.classList.contains('disabled')) {
@@ -795,7 +470,6 @@
                 }
             });
             
-            // 刷新项点击
             refreshItem.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (!refreshItem.classList.contains('disabled')) {
@@ -803,7 +477,6 @@
                 }
             });
             
-            // API状态项点击
             apiStatusItem.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 if (!apiStatusItem.classList.contains('disabled')) {
@@ -812,12 +485,10 @@
                 }
             });
             
-            // 关闭弹窗
             closeModalBtn.addEventListener('click', () => {
                 apiStatusModal.style.display = 'none';
             });
             
-            // 点击弹窗外部关闭
             apiStatusModal.addEventListener('click', (e) => {
                 if (e.target === apiStatusModal) {
                     apiStatusModal.style.display = 'none';
