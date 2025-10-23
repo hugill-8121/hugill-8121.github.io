@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>带标签的静态博客</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        body {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+            background-color: #f0f2f5;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        h1 {
+            color: #111827;
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header-desc {
+            color: #6b7280;
+            font-size: 1.1rem;
+        }
+
+        /* 标签云样式 */
+        .tag-cloud {
+            margin: 2rem 0 3rem;
+            padding: 1.5rem;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .tag-cloud h2 {
+            color: #1f2937;
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+        }
+
+        .tags-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.8rem;
+        }
+
+        .tag {
+            background-color: #eff6ff;
+            color: #1e40af;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tag:hover, .tag.active {
+            background-color: #1e40af;
+            color: white;
+        }
+
+        /* 分类区域 */
+        .category-section {
+            margin-bottom: 4rem;
+        }
+
+        .category-title {
+            color: #1f2937;
+            font-size: 1.6rem;
+            margin-bottom: 1.5rem;
+            padding-left: 0.75rem;
+            border-left: 4px solid #3b82f6;
+        }
+
+        /* 卡片容器 */
+        .cards-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        /* 卡片样式 + 缩放效果 */
+        .blog-card {
+            background-color: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            cursor: pointer;
+        }
+
+        .blog-card:hover {
+            transform: scale(1.04);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+
+        .card-title {
+            color: #1e40af;
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* 卡片内的标签样式 */
+        .card-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin: 1rem 0;
+        }
+
+        .card-tag {
+            background-color: #f1f5f9;
+            color: #475569;
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+
+        /* 修改时间样式 */
+        .card-meta {
+            color: #6b7280;
+            font-size: 0.9rem;
+            padding-top: 0.5rem;
+            border-top: 1px dashed #e5e7eb;
+            display: flex;
+            align-items: center;
+        }
+
+        .card-meta i {
+            margin-right: 0.3rem;
+            font-size: 0.8rem;
+        }
+
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            .cards-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* 无结果提示 */
+        .no-results {
+            text-align: center;
+            padding: 3rem;
+            color: #6b7280;
+        }
+
+        /* 加载状态 */
+        .loading {
+            text-align: center;
+            padding: 5rem 2rem;
+            color: #4b5563;
+        }
+    </style>
+    <!-- 引入Font Awesome图标库 -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+</head>
+<body>
+    <header>
+        <h1>技术博客</h1>
+        <p class="header-desc">显示别名和修改时间的博客示例</p>
+    </header>
+
+    <!-- 标签云：显示所有标签，可点击筛选 -->
+    <div class="tag-cloud">
+        <h2>标签云</h2>
+        <div class="tags-container" id="tags-container">
+            <!-- 标签会在这里动态生成 -->
+        </div>
+    </div>
+
+    <!-- 加载状态 -->
+    <div class="loading" id="loading">
+        正在加载博客内容...
+    </div>
+
+    <!-- 博客内容容器 -->
+    <div id="blog-container" style="display: none;"></div>
+
+    <!-- 无结果提示（默认隐藏） -->
+    <div class="no-results" id="no-results" style="display: none;">
+        没有找到匹配标签的文章
+    </div>
+
+    <script>
+        // 配置 - 替换为你的GitHub信息
+        const config = {
+            owner: 'your-github-username',  // 你的GitHub用户名
+            repo: 'your-repo-name',         // 你的仓库名
+            branch: 'main'                  // 你的分支名
+        };
+
+        // 存储所有博客数据（含标签和修改时间）和所有标签的集合
+        let allBlogs = [];
+        let allTags = new Set();
+
+        // DOM元素
+        const blogContainer = document.getElementById('blog-container');
+        const tagsContainer = document.getElementById('tags-container');
+        const noResultsEl = document.getElementById('no-results');
+        const loadingEl = document.getElementById('loading');
+
+        // 初始化：加载配置并处理标签
+        async function initBlog() {
+            try {
+                // 加载配置文件
+                const response = await fetch('blog-config.json');
+                if (!response.ok) throw new Error('配置文件加载失败');
+                
+                const blogConfig = await response.json();
+                
+                // 处理数据：提取所有文章和标签，并获取修改时间
+                await processBlogData(blogConfig);
+                
+                // 渲染标签云和博客卡片
+                renderTags();
+                renderBlogs();
+
+                // 隐藏加载状态，显示内容
+                loadingEl.style.display = 'none';
+                blogContainer.style.display = 'block';
+
+            } catch (error) {
+                console.error('初始化失败:', error);
+                loadingEl.innerHTML = `<p style="color: red;">加载失败: ${error.message}</p>`;
+            }
+        }
+
+        // 处理博客数据：提取所有文章和标签，获取文件修改时间
+        async function processBlogData(config) {
+            // 遍历每个分类
+            for (const categoryName of Object.keys(config)) {
+                for (const article of config[categoryName]) {
+                    // 获取文件的最后修改时间
+                    let lastModified = '未知时间';
+                    try {
+                        // 通过GitHub API获取文件最后提交时间
+                        const apiUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/commits?path=${encodeURIComponent(article.path)}&ref=${config.branch}&per_page=1`;
+                        const response = await fetch(apiUrl);
+                        
+                        if (response.ok) {
+                            const commits = await response.json();
+                            if (commits.length > 0) {
+                                // 格式化日期为本地时间
+                                const date = new Date(commits[0].commit.committer.date);
+                                lastModified = date.toLocaleString('zh-CN', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                });
+                            }
+                        }
+                    } catch (err) {
+                        console.warn(`无法获取${article.path}的修改时间:`, err);
+                    }
+                    
+                    // 给文章添加分类信息和修改时间
+                    const articleWithMeta = {
+                        ...article,
+                        category: categoryName,
+                        lastModified: lastModified
+                    };
+                    
+                    // 添加到所有文章数组
+                    allBlogs.push(articleWithMeta);
+                    
+                    // 提取标签到集合（去重）
+                    article.tags.forEach(tag => {
+                        allTags.add(tag);
+                    });
+                }
+            }
+        }
+
+        // 渲染标签云
+        function renderTags() {
+            // 清空标签容器
+            tagsContainer.innerHTML = '';
+            
+            // 添加"全部"标签（用于取消筛选）
+            const allTagEl = document.createElement('span');
+            allTagEl.className = 'tag active';
+            allTagEl.textContent = '全部';
+            allTagEl.addEventListener('click', () => {
+                // 点击"全部"显示所有文章
+                document.querySelectorAll('.tag').forEach(tag => tag.classList.remove('active'));
+                allTagEl.classList.add('active');
+                renderBlogs();
+            });
+            tagsContainer.appendChild(allTagEl);
+            
+            // 渲染所有标签
+            Array.from(allTags).forEach(tag => {
+                const tagEl = document.createElement('span');
+                tagEl.className = 'tag';
+                tagEl.textContent = tag;
+                
+                // 点击标签筛选文章
+                tagEl.addEventListener('click', () => {
+                    // 更新标签激活状态
+                    document.querySelectorAll('.tag').forEach(t => t.classList.remove('active'));
+                    tagEl.classList.add('active');
+                    
+                    // 筛选并渲染该标签的文章
+                    renderBlogs(tag);
+                });
+                
+                tagsContainer.appendChild(tagEl);
+            });
+        }
+
+        // 渲染博客卡片（支持按标签筛选）
+        function renderBlogs(filterTag = null) {
+            // 清空容器
+            blogContainer.innerHTML = '';
+            
+            // 筛选文章（如果有标签筛选）
+            const filteredBlogs = filterTag 
+                ? allBlogs.filter(blog => blog.tags.includes(filterTag))
+                : allBlogs;
+            
+            // 显示无结果提示
+            if (filteredBlogs.length === 0) {
+                noResultsEl.style.display = 'block';
+                return;
+            } else {
+                noResultsEl.style.display = 'none';
+            }
+            
+            // 按分类分组显示（相同分类的文章放在一起）
+            const blogsByCategory = {};
+            filteredBlogs.forEach(blog => {
+                if (!blogsByCategory[blog.category]) {
+                    blogsByCategory[blog.category] = [];
+                }
+                blogsByCategory[blog.category].push(blog);
+            });
+            
+            // 遍历分类渲染文章
+            Object.keys(blogsByCategory).forEach(categoryName => {
+                // 创建分类区域
+                const categorySection = document.createElement('section');
+                categorySection.className = 'category-section';
+                
+                // 分类标题
+                const categoryTitle = document.createElement('h2');
+                categoryTitle.className = 'category-title';
+                categoryTitle.textContent = categoryName;
+                categorySection.appendChild(categoryTitle);
+                
+                // 卡片容器
+                const cardsContainer = document.createElement('div');
+                cardsContainer.className = 'cards-container';
+                
+                // 为每个文章创建卡片
+                blogsByCategory[categoryName].forEach(article => {
+                    const card = createBlogCard(article);
+                    cardsContainer.appendChild(card);
+                });
+                
+                categorySection.appendChild(cardsContainer);
+                blogContainer.appendChild(categorySection);
+            });
+        }
+
+        // 创建单个博客卡片（显示alias和修改时间）
+        function createBlogCard(article) {
+            const card = document.createElement('div');
+            card.className = 'blog-card';
+            
+            // 卡片标题（使用alias）
+            const cardTitle = document.createElement('div');
+            cardTitle.className = 'card-title';
+            cardTitle.textContent = article.alias;  // 显示别名而非文件名
+            
+            // 卡片标签容器
+            const cardTags = document.createElement('div');
+            cardTags.className = 'card-tags';
+            
+            // 渲染卡片内的标签
+            article.tags.forEach(tag => {
+                const tagEl = document.createElement('span');
+                tagEl.className = 'card-tag';
+                tagEl.textContent = tag;
+                cardTags.appendChild(tagEl);
+            });
+            
+            // 卡片底部显示修改时间（替代原路径显示）
+            const cardMeta = document.createElement('div');
+            cardMeta.className = 'card-meta';
+            cardMeta.innerHTML = `<i class="fa fa-clock-o"></i> 最后修改: ${article.lastModified}`;
+            
+            // 组装卡片
+            card.appendChild(cardTitle);
+            card.appendChild(cardTags);  // 添加标签
+            card.appendChild(cardMeta);  // 添加修改时间
+            
+            // 点击卡片跳转
+            card.addEventListener('click', () => {
+                window.location.href = article.path;
+            });
+            
+            return card;
+        }
+
+        // 启动博客
+        initBlog();
+    </script>
+</body>
+</html>
