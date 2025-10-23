@@ -4,12 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>这里是云风青的blog</title>
-    <!-- 引入本地CSS文件 -->
     <link rel="stylesheet" href="./css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
 </head>
 <body>
-    <!-- 配置信息 -->
+    <!-- 博客配置 -->
     <script id="blog-settings" type="application/json">
         {"title":"云风青的技术博客","introduction":"欢迎来到云风青的blog！这里分享技术心得和学习笔记"}
     </script>
@@ -18,7 +17,7 @@
         <h1 id="blog-title">技术博客</h1>
         <p class="header-desc" id="blog-intro">显示别名和修改时间的博客示例</p>
         
-        <!-- 登录相关元素 -->
+        <!-- 登录区域 -->
         <div class="login-container">
             <span class="username-display" id="username-display"></span>
             <div class="avatar-btn" id="avatar-btn">
@@ -35,7 +34,7 @@
                     <i class="fa fa-sign-out"></i> 登出
                 </div>
                 <div class="menu-item disabled" id="refresh-item">
-                    <i class="fa fa-refresh"></i> 刷新
+                    <i class="fa fa-refresh"></i> 刷新博客数据
                 </div>
                 <div class="menu-item disabled" id="api-status-item">
                     <i class="fa fa-bar-chart"></i> 查询API状态
@@ -107,7 +106,7 @@
             branch: 'main'
         };
 
-        // 存储博客数据
+        // 存储博客数据（全局变量）
         let allBlogs = [];
         let allTags = new Set();
 
@@ -149,12 +148,12 @@
         // 初始化
         async function init() {
             loadBlogSettings();
-            checkLoginStatus();
-            await initBlog();
+            await loadBlogData(); // 先加载博客数据（从缓存或远程）
+            checkLoginStatus();   // 再检查登录状态
             bindEvents();
         }
 
-        // 加载博客配置
+        // 加载博客配置（标题和介绍）
         function loadBlogSettings() {
             try {
                 const settingsEl = document.getElementById('blog-settings');
@@ -166,33 +165,57 @@
             }
         }
 
-        // 初始化博客内容
-        async function initBlog() {
+        // 加载博客数据（优先从缓存加载，再尝试刷新）
+        async function loadBlogData() {
             try {
+                // 1. 先尝试从本地缓存加载
+                const cachedBlogs = localStorage.getItem('cachedBlogs');
+                const cachedTags = localStorage.getItem('cachedTags');
+                
+                if (cachedBlogs && cachedTags) {
+                    allBlogs = JSON.parse(cachedBlogs);
+                    allTags = new Set(JSON.parse(cachedTags));
+                    renderTags();
+                    renderBlogs();
+                    blogContainer.style.display = 'block';
+                }
+
+                // 2. 无论是否有缓存，都尝试从远程刷新（使用当前登录状态的token）
                 const response = await fetch('blog-config.json');
                 if (!response.ok) throw new Error('配置文件加载失败');
                 
                 const blogConfig = await response.json();
-                await processBlogData(blogConfig);
-                renderTags();
-                renderBlogs();
+                await refreshBlogData(blogConfig); // 刷新并更新数据
 
                 loadingEl.style.display = 'none';
-                blogContainer.style.display = 'block';
 
             } catch (error) {
-                console.error('初始化失败:', error);
-                loadingEl.innerHTML = `<p style="color: red;">加载失败: ${error.message}</p>`;
+                console.error('加载博客数据失败:', error);
+                // 如果缓存存在则显示缓存数据，否则显示错误
+                if (allBlogs.length > 0) {
+                    loadingEl.style.display = 'none';
+                    blogContainer.style.display = 'block';
+                } else {
+                    loadingEl.innerHTML = `<p style="color: red;">加载失败: ${error.message}</p>`;
+                }
             }
         }
 
-        // 处理博客数据
-        async function processBlogData(blogConfig) {
+        // 刷新博客数据（根据登录状态获取最新信息）
+        async function refreshBlogData(blogConfig) {
+            const newBlogs = [];
+            const newTags = new Set();
+            const token = localStorage.getItem('githubToken'); // 使用当前登录状态的token
+
             for (const categoryName of Object.keys(blogConfig)) {
                 for (const article of blogConfig[categoryName]) {
-                    let lastModified = '未知时间';
+                    // 保留缓存中的数据（如果存在）
+                    const cachedBlog = allBlogs.find(b => b.path === article.path);
+                    let lastModified = cachedBlog?.lastModified || '未知时间';
+                    let commitMessage = cachedBlog?.commitMessage || '无提交信息';
+
                     try {
-                        const token = localStorage.getItem('githubToken');
+                        // 尝试获取最新的提交信息
                         const commits = await getFileCommits(
                             config.owner, 
                             config.repo, 
@@ -210,21 +233,33 @@
                                 hour: '2-digit',
                                 minute: '2-digit'
                             });
+                            commitMessage = commits[0].commit.message || '无提交信息';
                         }
                     } catch (err) {
-                        console.warn(`无法获取${article.path}的修改时间:`, err);
+                        console.warn(`获取${article.path}的最新信息失败，使用缓存数据:`, err);
                     }
                     
                     const articleWithMeta = {
                         ...article,
                         category: categoryName,
-                        lastModified: lastModified
+                        lastModified: lastModified,
+                        commitMessage: commitMessage // 新增提交信息
                     };
                     
-                    allBlogs.push(articleWithMeta);
-                    article.tags.forEach(tag => allTags.add(tag));
+                    newBlogs.push(articleWithMeta);
+                    article.tags.forEach(tag => newTags.add(tag));
                 }
             }
+
+            // 更新数据并缓存
+            allBlogs = newBlogs;
+            allTags = newTags;
+            localStorage.setItem('cachedBlogs', JSON.stringify(allBlogs));
+            localStorage.setItem('cachedTags', JSON.stringify(Array.from(allTags)));
+
+            // 重新渲染
+            renderTags();
+            renderBlogs();
         }
 
         // 渲染标签云
@@ -256,7 +291,7 @@
             });
         }
 
-        // 渲染博客卡片
+        // 渲染博客卡片（显示提交信息）
         function renderBlogs(filterTag = null) {
             blogContainer.innerHTML = '';
             
@@ -301,7 +336,7 @@
             });
         }
 
-        // 创建单个博客卡片
+        // 创建单个博客卡片（包含提交信息）
         function createBlogCard(article) {
             const card = document.createElement('div');
             card.className = 'blog-card';
@@ -320,9 +355,17 @@
                 cardTags.appendChild(tagEl);
             });
             
+            // 提交信息（限制显示长度）
+            const shortMessage = article.commitMessage.length > 30 
+                ? article.commitMessage.substring(0, 30) + '...' 
+                : article.commitMessage;
+            
             const cardMeta = document.createElement('div');
             cardMeta.className = 'card-meta';
-            cardMeta.innerHTML = `<i class="fa fa-clock-o"></i> 最后修改: ${article.lastModified}`;
+            cardMeta.innerHTML = `
+                <div><i class="fa fa-clock-o"></i> 最后修改: ${article.lastModified}</div>
+                <div><i class="fa fa-comment"></i> 提交信息: ${shortMessage}</div>
+            `;
             
             card.appendChild(cardTitle);
             card.appendChild(cardTags);
@@ -335,25 +378,33 @@
             return card;
         }
 
-        // 检查登录状态
+        // 检查登录状态（登录后刷新博客数据）
         function checkLoginStatus() {
             const userInfo = JSON.parse(localStorage.getItem('githubUserInfo') || 'null');
             if (userInfo) {
+                // 已登录状态
                 usernameDisplay.textContent = userInfo.login;
                 usernameDisplay.style.display = 'inline';
                 avatarImg.src = userInfo.avatar_url;
                 avatarImg.style.display = 'block';
                 defaultAvatar.style.display = 'none';
                 
+                // 更新菜单状态
                 loginItem.style.display = 'none';
                 logoutItem.classList.remove('disabled');
                 refreshItem.classList.remove('disabled');
                 apiStatusItem.classList.remove('disabled');
+
+                // 登录后主动刷新一次博客数据（使用认证token获取更高权限）
+                refreshBlogDataFromConfig();
+
             } else {
+                // 未登录状态
                 usernameDisplay.style.display = 'none';
                 avatarImg.style.display = 'none';
                 defaultAvatar.style.display = 'block';
                 
+                // 更新菜单状态
                 loginItem.style.display = 'flex';
                 logoutItem.classList.add('disabled');
                 refreshItem.classList.add('disabled');
@@ -362,14 +413,29 @@
             }
         }
 
+        // 从配置文件刷新博客数据（封装通用逻辑）
+        async function refreshBlogDataFromConfig() {
+            try {
+                const response = await fetch('blog-config.json');
+                if (!response.ok) throw new Error('配置文件加载失败');
+                const blogConfig = await response.json();
+                await refreshBlogData(blogConfig);
+            } catch (err) {
+                console.error('刷新博客数据失败:', err);
+                alert('刷新失败: ' + err.message);
+            }
+        }
+
         // 登录处理
         async function handleLogin(token) {
             try {
                 const userInfo = await getUserInfo(token);
                 
+                // 保存token和用户信息（不影响博客缓存）
                 localStorage.setItem('githubToken', token);
                 localStorage.setItem('githubUserInfo', JSON.stringify(userInfo));
                 
+                // 更新登录状态并刷新数据
                 checkLoginStatus();
                 loginForm.style.display = 'none';
                 
@@ -380,10 +446,13 @@
             }
         }
 
-        // 登出处理
+        // 登出处理（保留博客缓存）
         function handleLogout() {
+            // 只清除登录相关缓存，保留博客数据缓存
             localStorage.removeItem('githubToken');
             localStorage.removeItem('githubUserInfo');
+            
+            // 更新登录状态（不刷新博客数据，保持缓存）
             checkLoginStatus();
         }
 
@@ -434,15 +503,18 @@
 
         // 绑定事件
         function bindEvents() {
+            // 头像点击
             avatarBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 loginMenu.classList.toggle('show');
             });
             
+            // 点击其他区域关闭菜单
             document.addEventListener('click', () => {
                 loginMenu.classList.remove('show');
             });
             
+            // 登录项点击
             loginItem.addEventListener('click', (e) => {
                 e.stopPropagation();
                 loginForm.style.display = loginForm.style.display === 'none' ? 'block' : 'none';
@@ -451,6 +523,7 @@
                 }
             });
             
+            // 提交登录
             submitLoginBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const token = githubTokenInput.value.trim();
@@ -462,6 +535,7 @@
                 }
             });
             
+            // 登出项点击
             logoutItem.addEventListener('click', (e) => {
                 e.stopPropagation();
                 if (!logoutItem.classList.contains('disabled')) {
@@ -470,13 +544,20 @@
                 }
             });
             
-            refreshItem.addEventListener('click', (e) => {
+            // 刷新博客数据
+            refreshItem.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 if (!refreshItem.classList.contains('disabled')) {
-                    window.location.reload();
+                    loadingEl.style.display = 'block';
+                    blogContainer.style.display = 'none';
+                    await refreshBlogDataFromConfig();
+                    loadingEl.style.display = 'none';
+                    blogContainer.style.display = 'block';
+                    loginMenu.classList.remove('show');
                 }
             });
             
+            // API状态查询
             apiStatusItem.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 if (!apiStatusItem.classList.contains('disabled')) {
@@ -485,10 +566,12 @@
                 }
             });
             
+            // 关闭弹窗
             closeModalBtn.addEventListener('click', () => {
                 apiStatusModal.style.display = 'none';
             });
             
+            // 点击弹窗外部关闭
             apiStatusModal.addEventListener('click', (e) => {
                 if (e.target === apiStatusModal) {
                     apiStatusModal.style.display = 'none';

@@ -1,4 +1,3 @@
-// 导入Octokit库
 import { Octokit } from "https://esm.sh/octokit";
 
 /**
@@ -31,6 +30,9 @@ async function getFileCommits(owner, repo, path, branch, token) {
     const response = await fetch(url, { headers });
     
     if (!response.ok) {
+        // 特殊处理404（文件不存在）和403（无权限）
+        if (response.status === 404) throw new Error(`文件不存在: ${path}`);
+        if (response.status === 403) throw new Error(`无权限访问，可能需要登录或Token权限不足`);
         throw new Error(`获取提交记录失败: ${response.statusText}`);
     }
 
@@ -59,7 +61,6 @@ async function getRateLimit(token) {
     return data;
 }
 
-// 导出模块
 export {
     Octokit,
     getFileCommits,
