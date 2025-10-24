@@ -2,6 +2,7 @@
     "grpc": [
         {
 			"title":"grpc测试",
+            "description":"grpc测试",
             "path": "blog/grpc/grpc学习.md",
             "tags": ["RPC", "分布式", "后端"]
         }
@@ -9,6 +10,7 @@
     "测试": [
         {
 			"title":"测试代码说明",
+            "description":"测试代码说明",
             "path": "blog/测试/测试.md",
             "tags": ["单元测试", "自动化", "质量保障"]
         }
