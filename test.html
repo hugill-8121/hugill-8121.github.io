@@ -1,33 +1,634 @@
-// 渲染博客卡片（只使用blog-container作为卡片容器）
-function renderBlogs(filterTag = null) {
-    if (!blogContainer) return;
-    
-    // 清空容器并显示
-    blogContainer.innerHTML = '';
-    blogContainer.style.display = 'block';
-    
-    // 过滤博客
-    const filteredBlogs = filterTag 
-        ? allBlogs.filter(blog => blog.tags.includes(filterTag))
-        : allBlogs;
-    
-    // 处理无结果情况
-    if (filteredBlogs.length === 0) {
-        noResultsEl?.style.display = 'block';
-        return;
-    } else {
-        noResultsEl?.style.display = 'none';
-    }
-    
-    // 创建统一的卡片容器（直接作为blog-container的子元素）
-    const cardsContainer = document.createElement('div');
-    cardsContainer.className = 'cards-container'; // 复用原有的网格布局样式
-    
-    // 遍历所有过滤后的博客，创建卡片并添加到容器
-    filteredBlogs.forEach(article => {
-        cardsContainer.appendChild(createBlogCard(article));
-    });
-    
-    // 将卡片容器添加到blog-container
-    blogContainer.appendChild(cardsContainer);
-}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>batchGetFileCommits 接口测试工具 - 云风青的技术博客</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        textarea {
+            height: 120px;
+            resize: vertical;
+        }
+        button {
+            background: #0366d6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #005cc5;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 20px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+        .result-item {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        .result-item:last-child {
+            border-bottom: none;
+        }
+        .success {
+            color: #28a745;
+        }
+        .error {
+            color: #dc3545;
+        }
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+        .commit-details {
+            margin-top: 10px;
+            padding-left: 20px;
+            font-size: 0.9em;
+        }
+        .commit-meta {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .edit-section {
+            margin: 15px 0;
+        }
+        .edit-btn {
+            background-color: #28a745;
+            margin-right: 10px;
+        }
+        .edit-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .blog-header {
+            margin-bottom: 3rem;
+            text-align: center;
+        }
+        .test-tool-section {
+            margin-top: 4rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- 配置信息 - 与index.html共用数据源 -->
+    <script id="blog-settings" type="application/json">
+        {"title":"云风青的技术博客","introduction":"欢迎来到云风青的blog！这里分享技术心得和学习笔记"}
+    </script>
+
+    <header>
+        <div class="blog-header">
+            <h1 id="blog-title">技术博客</h1>
+            <p class="header-desc" id="blog-intro">显示别名和修改时间的博客示例</p>
+        </div>
+        
+        <!-- 登录相关元素 - 与index.html保持一致 -->
+        <div class="login-container">
+            <span class="username-display" id="username-display"></span>
+            <div class="avatar-btn" id="avatar-btn">
+                <img src="" alt="用户头像" class="avatar-img" id="avatar-img" style="display: none;">
+                <i class="fa fa-user" id="default-avatar" style="color: #6b7280;"></i>
+            </div>
+            
+            <div class="login-menu" id="login-menu">
+                <div class="menu-item" id="login-item">
+                    <i class="fa fa-sign-in"></i> 登录
+                </div>
+                <div class="menu-divider"></div>
+                <div class="menu-item disabled" id="logout-item">
+                    <i class="fa fa-sign-out"></i> 登出
+                </div>
+                <div class="menu-item disabled" id="refresh-item">
+                    <i class="fa fa-refresh"></i> 刷新
+                </div>
+                <div class="menu-item disabled" id="api-status-item">
+                    <i class="fa fa-bar-chart"></i> 查询API状态
+                </div>
+                
+                <!-- 登录表单 -->
+                <div id="login-form" style="display: none; padding: 0 1rem 1rem;">
+                    <input type="password" class="token-input" id="github-token" placeholder="输入GitHub Token (ghp_xxx...)">
+                    <button class="login-btn" id="submit-login">确认登录</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- API状态弹窗 - 与index.html保持一致 -->
+    <div class="api-status-modal" id="api-status-modal">
+        <div class="modal-content">
+            <h3 class="modal-title">API 限流状态</h3>
+            <div class="info-item">
+                <strong>用户名：</strong>
+                <span id="modal-user-login">-</span>
+            </div>
+            <div class="info-item">
+                <strong>Core API 剩余次数：</strong>
+                <span id="modal-core-remaining">-</span> / <span id="modal-core-limit">-</span>
+            </div>
+            <div class="info-item">
+                <strong>Core API 重置时间：</strong>
+                <span id="modal-core-reset">-</span>
+            </div>
+            <div class="info-item">
+                <strong>Search API 剩余次数：</strong>
+                <span id="modal-search-remaining">-</span> / <span id="modal-search-limit">-</span>
+            </div>
+            <div class="info-item">
+                <strong>Search API 重置时间：</strong>
+                <span id="modal-search-reset">-</span>
+            </div>
+            <div class="info-item">
+                <strong>GraphQL API 剩余次数：</strong>
+                <span id="modal-graphql-remaining">-</span> / <span id="modal-graphql-limit">-</span>
+            </div>
+            <button class="close-modal" id="close-modal">关闭</button>
+        </div>
+    </div>
+
+    <!-- 测试工具区域 - 下移博客标题和标签 -->
+    <div class="test-tool-section">
+        <h2>batchGetFileCommits 接口测试工具</h2>
+        
+        <!-- 提交信息展示区域 -->
+        <div class="commit-meta" id="commit-info">
+            <div><strong>提交作者：</strong><span id="commit-author">-</span></div>
+            <div><strong>提交时间：</strong><span id="commit-time">-</span></div>
+            <div><strong>提交信息：</strong><span id="commit-message">-</span></div>
+        </div>
+        
+        <!-- 编辑按钮区域 -->
+        <div class="edit-section">
+            <button class="edit-btn" id="edit-btn" disabled>编辑博客</button>
+            <span id="edit-permission-info" style="color: #6b7280; font-size: 0.9em;">请登录以获取编辑权限</span>
+        </div>
+        
+        <div class="form-group">
+            <label for="github-token-test">GitHub Token（可选）</label>
+            <input type="text" id="github-token-test" placeholder="ghp_...">
+        </div>
+        
+        <div class="form-group">
+            <label for="owner">仓库所有者</label>
+            <input type="text" id="owner" value="hugill-8121" placeholder="例如：hugill-8121">
+        </div>
+        
+        <div class="form-group">
+            <label for="repo">仓库名称</label>
+            <input type="text" id="repo" value="hugill-8121.github.io" placeholder="例如：hugill-8121.github.io">
+        </div>
+        
+        <div class="form-group">
+            <label for="branch">分支</label>
+            <input type="text" id="branch" value="main" placeholder="例如：main">
+        </div>
+        
+        <div class="form-group">
+            <label for="file-paths">文件路径（每行一个）</label>
+            <textarea id="file-paths">blog/grpc/grpc学习.md
+blog/测试/测试.md</textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="per-page">每页数量（1-500）</label>
+            <input type="number" id="per-page" value="100" min="1" max="500">
+        </div>
+        
+        <button id="test-btn">测试批量获取提交信息</button>
+        
+        <div class="results" id="results"></div>
+    </div>
+
+    <script type="module" src="./js/github-api.js"></script>
+    <script type="module">
+        import { 
+            Octokit, 
+            getFileCommits, 
+            getUserInfo, 
+            getRateLimit 
+        } from './js/github-api.js';
+
+        // 等待DOM完全加载
+        document.addEventListener('DOMContentLoaded', async () => {
+            // 从当前URL解析GitHub用户名和仓库名
+            const hostname = window.location.hostname;
+            const owner = hostname.split('.github.io')[0];
+            const repo = hostname;
+            const config = {
+                owner: owner,
+                repo: repo,
+                branch: 'main'
+            };
+
+            // DOM元素
+            const blogTitle = document.getElementById('blog-title');
+            const blogIntro = document.getElementById('blog-intro');
+            
+            // 登录相关DOM
+            const avatarBtn = document.getElementById('avatar-btn');
+            const loginMenu = document.getElementById('login-menu');
+            const loginItem = document.getElementById('login-item');
+            const logoutItem = document.getElementById('logout-item');
+            const refreshItem = document.getElementById('refresh-item');
+            const apiStatusItem = document.getElementById('api-status-item');
+            const loginForm = document.getElementById('login-form');
+            const githubTokenInput = document.getElementById('github-token');
+            const submitLoginBtn = document.getElementById('submit-login');
+            const avatarImg = document.getElementById('avatar-img');
+            const defaultAvatar = document.getElementById('default-avatar');
+            const usernameDisplay = document.getElementById('username-display');
+            const testTokenInput = document.getElementById('github-token-test');
+            
+            // 提交信息DOM
+            const commitAuthor = document.getElementById('commit-author');
+            const commitTime = document.getElementById('commit-time');
+            const commitMessage = document.getElementById('commit-message');
+            
+            // 编辑按钮DOM
+            const editBtn = document.getElementById('edit-btn');
+            const editPermissionInfo = document.getElementById('edit-permission-info');
+
+            // 加载博客配置（与index.html共用数据源）
+            loadBlogSettings();
+            
+            // 检查登录状态（共用localStorage缓存）
+            checkLoginStatus();
+            
+            // 绑定事件
+            bindEvents();
+            
+            // 尝试从缓存加载提交信息
+            loadCachedCommitInfo();
+
+            // 加载博客标题和介绍
+            function loadBlogSettings() {
+                try {
+                    const settingsEl = document.getElementById('blog-settings');
+                    const settings = JSON.parse(settingsEl.textContent);
+                    if (settings.title) blogTitle.textContent = settings.title;
+                    if (settings.introduction) blogIntro.textContent = settings.introduction;
+                } catch (err) {
+                    console.warn('加载博客配置失败，使用默认值:', err);
+                }
+            }
+
+            // 检查登录状态（使用localStorage共享登录状态）
+            async function checkLoginStatus() {
+                const savedToken = localStorage.getItem('githubToken');
+                const savedUser = JSON.parse(localStorage.getItem('githubUser') || 'null');
+                
+                if (savedToken && savedUser) {
+                    // 已登录状态
+                    updateLoginUI(true, savedUser);
+                    // 填充token输入框
+                    githubTokenInput.value = savedToken;
+                    testTokenInput.value = savedToken;
+                    // 检查编辑权限
+                    checkEditPermission(savedToken);
+                } else {
+                    // 未登录状态
+                    updateLoginUI(false);
+                }
+            }
+
+            // 更新登录状态UI
+            function updateLoginUI(isLoggedIn, user = null) {
+                if (isLoggedIn && user) {
+                    usernameDisplay.textContent = user.login;
+                    usernameDisplay.style.display = 'inline';
+                    
+                    if (user.avatar_url) {
+                        avatarImg.src = user.avatar_url;
+                        avatarImg.style.display = 'block';
+                        defaultAvatar.style.display = 'none';
+                    }
+                    
+                    loginItem.style.display = 'none';
+                    logoutItem.classList.remove('disabled');
+                    refreshItem.classList.remove('disabled');
+                    apiStatusItem.classList.remove('disabled');
+                } else {
+                    usernameDisplay.style.display = 'none';
+                    avatarImg.style.display = 'none';
+                    defaultAvatar.style.display = 'block';
+                    
+                    loginItem.style.display = 'block';
+                    logoutItem.classList.add('disabled');
+                    refreshItem.classList.add('disabled');
+                    apiStatusItem.classList.add('disabled');
+                }
+            }
+
+            // 检查编辑权限
+            async function checkEditPermission(token) {
+                try {
+                    const octokit = new Octokit({ auth: token });
+                    // 尝试获取仓库权限信息
+                    const response = await octokit.rest.repos.get({
+                        owner: config.owner,
+                        repo: config.repo
+                    });
+                    
+                    // 如果能成功获取仓库信息，认为有编辑权限
+                    editBtn.disabled = false;
+                    editPermissionInfo.textContent = '已获得编辑权限';
+                    editPermissionInfo.style.color = '#28a745';
+                    
+                    return true;
+                } catch (error) {
+                    console.warn('无编辑权限:', error);
+                    editBtn.disabled = true;
+                    editPermissionInfo.textContent = '无编辑权限（Token需要repo权限）';
+                    editPermissionInfo.style.color = '#dc3545';
+                    return false;
+                }
+            }
+
+            // 从缓存加载提交信息
+            function loadCachedCommitInfo() {
+                const cachedCommits = JSON.parse(localStorage.getItem('blogCommits') || '{}');
+                // 取第一个缓存的提交信息作为示例
+                const firstCommitPath = Object.keys(cachedCommits)[0];
+                
+                if (firstCommitPath && cachedCommits[firstCommitPath].length > 0) {
+                    const commit = cachedCommits[firstCommitPath][0];
+                    commitAuthor.textContent = commit.commit.author.name;
+                    commitTime.textContent = new Date(commit.commit.author.date).toLocaleString();
+                    commitMessage.textContent = commit.commit.message;
+                }
+            }
+
+            // 绑定事件
+            function bindEvents() {
+                // 登录菜单切换
+                avatarBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    loginMenu.classList.toggle('show');
+                });
+
+                // 点击页面其他地方关闭登录菜单
+                document.addEventListener('click', () => {
+                    loginMenu.classList.remove('show');
+                });
+
+                // 登录项点击
+                loginItem.addEventListener('click', () => {
+                    loginForm.style.display = loginForm.style.display === 'none' ? 'block' : 'none';
+                });
+
+                // 提交登录
+                submitLoginBtn.addEventListener('click', async () => {
+                    const token = githubTokenInput.value.trim();
+                    if (!token) {
+                        alert('请输入GitHub Token');
+                        return;
+                    }
+
+                    try {
+                        const userInfo = await getUserInfo(token);
+                        localStorage.setItem('githubToken', token);
+                        localStorage.setItem('githubUser', JSON.stringify(userInfo));
+                        
+                        updateLoginUI(true, userInfo);
+                        testTokenInput.value = token;
+                        checkEditPermission(token);
+                        loginForm.style.display = 'none';
+                    } catch (error) {
+                        alert('登录失败: ' + error.message);
+                    }
+                });
+
+                // 登出
+                logoutItem.addEventListener('click', () => {
+                    if (logoutItem.classList.contains('disabled')) return;
+                    
+                    localStorage.removeItem('githubToken');
+                    localStorage.removeItem('githubUser');
+                    updateLoginUI(false);
+                    githubTokenInput.value = '';
+                    testTokenInput.value = '';
+                    editBtn.disabled = true;
+                    editPermissionInfo.textContent = '请登录以获取编辑权限';
+                    editPermissionInfo.style.color = '#6b7280';
+                });
+
+                // 编辑按钮点击事件
+                editBtn.addEventListener('click', async () => {
+                    // 检查登录状态
+                    const token = localStorage.getItem('githubToken');
+                    if (!token) {
+                        alert('请先登录');
+                        return;
+                    }
+                    
+                    // 检查权限
+                    const hasPermission = await checkEditPermission(token);
+                    if (!hasPermission) {
+                        alert('没有编辑权限，请使用具有repo权限的Token');
+                        return;
+                    }
+                    
+                    // 获取当前选中的文件路径
+                    const filePaths = document.getElementById('file-paths').value
+                        .split('\n')
+                        .map(path => path.trim())
+                        .filter(Boolean);
+                    
+                    if (filePaths.length === 0) {
+                        alert('请输入文件路径');
+                        return;
+                    }
+                    
+                    // 解析第一个文件的group和title
+                    const firstPath = filePaths[0];
+                    const pathParts = firstPath.split('/');
+                    // 简单解析group和title（实际可能需要更复杂的逻辑）
+                    const group = pathParts.length >= 2 ? pathParts[1] : '';
+                    const title = pathParts.length >= 3 ? pathParts[2].replace('.md', '') : '';
+                    
+                    // 跳转到编辑页面（暂不实现编辑功能）
+                    const editUrl = `https://hugill-8121.github.io/blog-edit.html?group=${encodeURIComponent(group)}&title=${encodeURIComponent(title)}`;
+                    alert(`即将跳转到编辑页面: ${editUrl}\n(编辑功能暂未实现)`);
+                    // window.location.href = editUrl;
+                });
+
+                // 测试按钮点击事件
+                document.getElementById('test-btn').addEventListener('click', async () => {
+                    // 获取表单数据
+                    const token = testTokenInput.value.trim() || null;
+                    const owner = document.getElementById('owner').value.trim();
+                    const repo = document.getElementById('repo').value.trim();
+                    const branch = document.getElementById('branch').value.trim();
+                    const perPage = parseInt(document.getElementById('per-page').value) || 100;
+                    const filePaths = document.getElementById('file-paths').value
+                        .split('\n')
+                        .map(path => path.trim())
+                        .filter(Boolean);
+
+                    // 验证输入
+                    if (!owner || !repo || !branch || filePaths.length === 0) {
+                        document.getElementById('results').innerHTML = '<div class="error">请填写必要的参数（所有者、仓库、分支和文件路径）</div>';
+                        return;
+                    }
+
+                    // 显示加载状态
+                    document.getElementById('results').innerHTML = '<div class="loading">正在批量获取文件提交信息...</div>';
+
+                    try {
+                        // 调用批量获取接口
+                        const results = await batchGetFileCommits(
+                            owner,
+                            repo,
+                            filePaths,
+                            branch,
+                            token,
+                            perPage
+                        );
+
+                        // 缓存提交信息到localStorage
+                        const commitCache = {};
+                        results.forEach(item => {
+                            if (!item.error) {
+                                commitCache[item.path] = item.commits;
+                            }
+                        });
+                        localStorage.setItem('blogCommits', JSON.stringify(commitCache));
+                        
+                        // 更新显示的提交信息
+                        loadCachedCommitInfo();
+
+                        // 显示结果
+                        let html = '';
+                        results.forEach(item => {
+                            html += `<div class="result-item">
+                                <strong>${item.path}</strong>
+                                ${item.error ? 
+                                    `<div class="error">错误: ${item.error}</div>` : 
+                                    `<div class="success">成功获取 ${item.total} 条提交记录</div>
+                                    <div class="commit-details">
+                                        <div>最新提交 SHA: ${item.commits[0]?.sha || '无'}</div>
+                                        <div>最新提交时间: ${item.commits[0] ? new Date(item.commits[0].commit.committer.date).toLocaleString() : '无'}</div>
+                                    </div>`
+                                }
+                            </div>`;
+                        });
+                        document.getElementById('results').innerHTML = html;
+
+                    } catch (error) {
+                        document.getElementById('results').innerHTML = `<div class="error">接口调用失败: ${error.message}</div>`;
+                    }
+                });
+            }
+
+            // 批量获取文件提交信息的函数
+            async function batchGetFileCommits(owner, repo, filePaths, branch = 'main', token = null, perPage = 100) {
+                // 存储每个文件的结果
+                const results = [];
+                
+                // 为每个文件创建获取提交的任务
+                const tasks = filePaths.map(async (path) => {
+                    try {
+                        // 构建请求头（包含认证信息）
+                        const headers = {
+                            'Accept': 'application/vnd.github.v3+json'
+                        };
+                        if (token) {
+                            headers['Authorization'] = `token ${token}`;
+                        }
+                        
+                        // 分页获取所有提交
+                        let allCommits = [];
+                        let page = 1;
+                        let hasMore = true;
+                        
+                        while (hasMore) {
+                            // 构建请求URL
+                            const url = new URL(`https://api.github.com/repos/${owner}/${repo}/commits`);
+                            url.searchParams.append('path', path);
+                            url.searchParams.append('sha', branch);
+                            url.searchParams.append('per_page', perPage);
+                            url.searchParams.append('page', page);
+                            
+                            // 发起请求
+                            const response = await fetch(url.toString(), { headers });
+                            
+                            // 处理错误状态码
+                            if (!response.ok) {
+                                const errorData = await response.json().catch(() => ({}));
+                                throw new Error(errorData.message || `HTTP错误: ${response.status}`);
+                            }
+                            
+                            // 解析响应数据
+                            const commits = await response.json();
+                            if (commits.length === 0) {
+                                hasMore = false; // 没有更多数据
+                            } else {
+                                allCommits = allCommits.concat(commits);
+                                page++; // 继续下一页
+                            }
+                        }
+                        
+                        // 存储成功结果
+                        return {
+                            path,
+                            commits: allCommits,
+                            total: allCommits.length,
+                            error: null
+                        };
+                        
+                    } catch (error) {
+                        // 存储错误结果
+                        return {
+                            path,
+                            commits: [],
+                            total: 0,
+                            error: error.message
+                        };
+                    }
+                });
+                
+                // 并行执行所有任务并收集结果
+                const taskResults = await Promise.all(tasks);
+                
+                // 按原始文件路径顺序排列结果
+                filePaths.forEach(path => {
+                    const result = taskResults.find(item => item.path === path);
+                    if (result) results.push(result);
+                });
+                
+                return results;
+            }
+        });
+    </script>
+</body>
+</html>
