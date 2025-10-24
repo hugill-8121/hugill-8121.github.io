@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>博客展示</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css">
+    <style>
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            border-bottom: 1px solid #eee;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+        .tags {
+            margin: 10px 0;
+        }
+        .tag {
+            display: inline-block;
+            background: #f0f0f0;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin-right: 5px;
+            font-size: 0.8em;
+        }
+        .loading {
+            text-align: center;
+            padding: 50px;
+        }
+        .error {
+            color: #dc3545;
+            text-align: center;
+            padding: 50px;
+        }
+        .entry {
+            line-height: 1.8;
+        }
+        .entry h1, .entry h2, .entry h3 {
+            margin-top: 1.5em;
+            margin-bottom: 0.8em;
+        }
+        .entry p {
+            margin-bottom: 1em;
+        }
+        .entry img {
+            max-width: 100%;
+            margin: 1em 0;
+        }
+        .entry pre {
+            background: #f8f9fa;
+            padding: 1em;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 1em 0;
+        }
+        .entry code {
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 id="blog-title"></h1>
+            <div class="tags" id="blog-tags"></div>
+        </div>
+        <div class="content">
+            <div id="loading" class="loading">加载中...</div>
+            <div id="error" class="error" style="display: none;"></div>
+            <div id="blog-content" class="entry" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/showdown@2.1.0/dist/showdown.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-javascript.min.js"></script>
+    <script src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/x-mathjax-config">
+        MathJax.Hub.Config({
+            tex2jax: {
+                inlineMath: [['$','$'], ["\\(","\\)"]],
+                processEscapes: true
+            }
+        });
+    </script>
+
+    <script>
+        // 解析URL参数
+        function getUrlParams() {
+            const params = {};
+            const queryString = window.location.search.slice(1);
+            queryString.split('&').forEach(pair => {
+                const [key, value] = pair.split('=');
+                if (key && value) {
+                    params[key] = decodeURIComponent(value);
+                }
+            });
+            return params;
+        }
+
+        // HTML转义函数
+        function escapeHtml(markdown) {
+            return markdown
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // 渲染Markdown内容
+        function renderMarkdown(markdownContent) {
+            // 处理代码块
+            let processedContent = markdownContent
+                .replace(/~~~~\{(.*?)\}\n([\s\S]*?)~~~~/g, (match, lang, code) => {
+                    return `<pre><code class="language-${lang}">${escapeHtml(code)}</code></pre>`;
+                })
+                .replace(/~~~~\n([\s\S]*?)~~~~/g, (match, code) => {
+                    return `<pre><code>${escapeHtml(code)}</code></pre>`;
+                });
+
+            // 使用showdown转换为HTML
+            const converter = new showdown.Converter({
+                tables: true,
+                tasklists: true,
+                strikethrough: true,
+                ghCodeBlocks: true
+            });
+            return converter.makeHtml(processedContent);
+        }
+
+        // 主函数
+        async function init() {
+            try {
+                // 获取URL参数
+                const params = getUrlParams();
+                const group = params.group;
+                const blog = params.blog;
+
+                if (!group || !blog) {
+                    throw new Error('缺少必要参数: group和blog');
+                }
+
+                // 加载配置文件
+                const configResponse = await fetch('./blog-config.json');
+                if (!configResponse.ok) {
+                    throw new Error('无法加载配置文件');
+                }
+                const config = await configResponse.json();
+
+                // 查找对应的博客信息
+                const groupConfig = config[group];
+                if (!groupConfig) {
+                    throw new Error(`找不到分组: ${group}`);
+                }
+
+                const blogInfo = groupConfig.find(item => item.alias === blog);
+                if (!blogInfo) {
+                    throw new Error(`在分组 ${group} 中找不到博客: ${blog}`);
+                }
+
+                // 显示博客标题和标签
+                document.getElementById('blog-title').textContent = blogInfo.alias;
+                const tagsContainer = document.getElementById('blog-tags');
+                blogInfo.tags.forEach(tag => {
+                    const tagElement = document.createElement('span');
+                    tagElement.className = 'tag';
+                    tagElement.textContent = tag;
+                    tagsContainer.appendChild(tagElement);
+                });
+
+                // 加载Markdown文件
+                const markdownResponse = await fetch(blogInfo.path);
+                if (!markdownResponse.ok) {
+                    throw new Error(`无法加载博客内容: ${blogInfo.path}`);
+                }
+                const markdownContent = await markdownResponse.text();
+
+                // 渲染Markdown
+                const htmlContent = renderMarkdown(markdownContent);
+                const contentContainer = document.getElementById('blog-content');
+                contentContainer.innerHTML = htmlContent;
+
+                // 代码高亮
+                Prism.highlightAll();
+
+                // 渲染数学公式
+                if (window.MathJax) {
+                    MathJax.Hub.Queue(["Typeset", MathJax.Hub, contentContainer]);
+                }
+
+                // 显示内容，隐藏加载状态
+                document.getElementById('loading').style.display = 'none';
+                contentContainer.style.display = 'block';
+
+            } catch (error) {
+                console.error('加载失败:', error);
+                const errorContainer = document.getElementById('error');
+                errorContainer.textContent = `加载失败: ${error.message}`;
+                errorContainer.style.display = 'block';
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
