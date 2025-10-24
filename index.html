@@ -352,18 +352,19 @@
 
             // 点击卡片跳转到对应文章
             card.addEventListener('click', () => {
-                // 构建带参数的目标路径
-                const targetPath = `blog-show.html?group=${encodeURIComponent(article.group)}&blog=${encodeURIComponent(article.alias)}`;
+                window.location.href = article.path;
+                // // 构建带参数的目标路径
+                // const targetPath = `blog-show.html?group=${encodeURIComponent(article.group)}&blog=${encodeURIComponent(article.alias)}`;
                 
-                // 适配项目路由系统的跳转方式
-                if (Spine.Route.historySupport) {
-                    // 支持HTML5 History API时使用pushState
-                    window.history.pushState({}, '', targetPath);
-                    Spine.Route.change(); // 触发路由变化
-                } else {
-                    // 不支持时使用hash跳转（兼容旧浏览器）
-                    window.location.href = targetPath;
-                }
+                // // 适配项目路由系统的跳转方式
+                // if (Spine.Route.historySupport) {
+                //     // 支持HTML5 History API时使用pushState
+                //     window.history.pushState({}, '', targetPath);
+                //     Spine.Route.change(); // 触发路由变化
+                // } else {
+                //     // 不支持时使用hash跳转（兼容旧浏览器）
+                //     window.location.href = targetPath;
+                // }
             });
             
             return card;
