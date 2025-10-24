@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>编辑博客</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <button id="back-to-show" style="margin-bottom: 20px;">← 返回查看</button>
+        <h2>编辑文章</h2>
+        <div class="form-group">
+            <label for="edit-title">文章标题</label>
+            <input type="text" id="edit-title">
+        </div>
+        <div class="form-group">
+            <label for="edit-tags">标签（用逗号分隔）</label>
+            <input type="text" id="edit-tags">
+        </div>
+        <div class="form-group">
+            <label for="edit-content">文章内容（Markdown）</label>
+            <textarea id="edit-content" style="height: 400px;"></textarea>
+        </div>
+        <button id="save-edit">保存修改</button>
+        <div id="edit-status" class="status"></div>
+    </div>
+
+    <script type="module">
+        import { Octokit } from '../js/github-api.js';
+
+        // 解析URL参数
+        function getUrlParams() {
+            const params = {};
+            const queryString = window.location.search.slice(1);
+            queryString.split('&').forEach(pair => {
+                const [key, value] = pair.split('=');
+                if (key && value) {
+                    params[key] = decodeURIComponent(value);
+                }
+            });
+            return params;
+        }
+
+        // 配置信息
+        const config = {
+            owner: window.location.hostname.split('.github.io')[0],
+            repo: window.location.hostname,
+            branch: 'main'
+        };
+
+        // 当前博客信息
+        let currentBlog = null;
+
+        // DOM元素
+        const dom = {
+            backToShow: document.getElementById('back-to-show'),
+            editTitle: document.getElementById('edit-title'),
+            editTags: document.getElementById('edit-tags'),
+            editContent: document.getElementById('edit-content'),
+            saveEdit: document.getElementById('save-edit'),
+            editStatus: document.getElementById('edit-status')
+        };
+
+        // 显示状态
+        function showStatus(msg, isError = false) {
+            dom.editStatus.textContent = msg;
+            dom.editStatus.className = isError ? 'status error' : 'status success';
+        }
+
+        // 返回查看页面
+        dom.backToShow.addEventListener('click', () => {
+            const params = getUrlParams();
+            window.location.href = `../blog-show.html?group=${params.group}&blog=${params.blog}`;
+        });
+
+        // 保存编辑
+        dom.saveEdit.addEventListener('click', async () => {
+            const token = localStorage.getItem('github-token');
+            if (!token) {
+                showStatus('请先登录（需在首页登录）', true);
+                return;
+            }
+
+            if (!currentBlog) return;
+
+            try {
+                showStatus('保存中...');
+                
+                const octokit = new Octokit({ auth: token });
+                const content = dom.editContent.value;
+                const encodedContent = btoa(unescape(encodeURIComponent(content)));
+                
+                // 获取当前文件SHA
+                const { data: fileData } = await octokit.rest.repos.getContent({
+                    owner: config.owner,
+                    repo: config.repo,
+                    path: currentBlog.path,
+                    ref: config.branch
+                });
+
+                // 更新文件
+                await octokit.rest.repos.createOrUpdateFileContents({
+                    owner: config.owner,
+                    repo: config.repo,
+                    path: currentBlog.path,
+                    message: `更新 ${dom.editTitle.value}`,
+                    content: encodedContent,
+                    sha: fileData.sha,
+                    branch: config.branch
+                });
+
+                showStatus('保存成功！');
+                setTimeout(() => {
+                    dom.backToShow.click();
+                }, 1000);
+
+            } catch (error) {
+                console.error('保存失败:', error);
+                showStatus(`保存失败: ${error.message}`, true);
+            }
+        });
+
+        // 初始化
+        async function init() {
+            try {
+                const params = getUrlParams();
+                const group = params.group;
+                const blogTitle = params.blog;
+
+                if (!group || !blogTitle) {
+                    throw new Error('缺少必要参数');
+                }
+
+                // 加载博客配置
+                const configResponse = await fetch('../blog-config.json');
+                if (!configResponse.ok) {
+                    throw new Error('无法加载配置文件');
+                }
+                const configData = await configResponse.json();
+
+                // 查找博客信息
+                const groupData = configData[group];
+                if (!groupData) {
+                    throw new Error(`找不到分组: ${group}`);
+                }
+
+                currentBlog = groupData.find(item => item.title === blogTitle);
+                if (!currentBlog) {
+                    throw new Error(`找不到博客: ${blogTitle}`);
+                }
+
+                // 加载内容
+                dom.editTitle.value = currentBlog.title;
+                dom.editTags.value = currentBlog.tags.join(',');
+
+                const contentResponse = await fetch(currentBlog.path);
+                if (contentResponse.ok) {
+                    dom.editContent.value = await contentResponse.text();
+                }
+
+            } catch (error) {
+                console.error('初始化失败:', error);
+                showStatus(`初始化失败: ${error.message}`, true);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

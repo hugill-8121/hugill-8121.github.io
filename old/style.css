@@ -21,19 +21,6 @@ header {
     position: relative;
 }
 
-/* 容器切换样式 */
-.container-active {
-    display: block;
-}
-
-.container-hidden {
-    display: none;
-}
-
-#container-wrapper {
-    width: 100%;
-}
-
 /* 登录相关样式 */
 .login-container {
     position: absolute;
@@ -41,14 +28,14 @@ header {
     right: 0;
     display: flex;
     align-items: center;
-    gap: 0.8rem;
+    gap: 0.8rem; /* 用户名和头像间距 */
     padding: 0.5rem;
 }
 
 .username-display {
     color: #1f2937;
     font-weight: 500;
-    display: none;
+    display: none; /* 未登录时隐藏 */
 }
 
 .avatar-btn {
@@ -139,6 +126,45 @@ header {
 
 .login-btn:hover {
     background-color: #2563eb;
+}
+
+.api-status-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0,0,0,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background-color: white;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 1.5rem;
+}
+
+.modal-title {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+    color: #1f2937;
+}
+
+.close-modal {
+    background-color: #ef4444;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 1rem;
 }
 
 /* 博客主样式 */
@@ -258,189 +284,13 @@ h1 {
     font-size: 0.8rem;
 }
 
-/* 查看容器样式 */
-#back-to-list, #back-to-show {
-    margin-bottom: 20px;
-    background: #6b7280;
-    color: white;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-
-#back-to-list:hover, #back-to-show:hover {
-    background: #4b5563;
-}
-
-#edit-current-blog {
-    background: #3b82f6;
-    color: white;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-
-#edit-current-blog:hover {
-    background: #2563eb;
-}
-
-/* 编辑容器样式 */
-.form-group {
-    margin-bottom: 1.5rem;
-}
-
-.form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 600;
-    color: #1f2937;
-}
-
-.form-group input, .form-group textarea {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    font-size: 1rem;
-}
-
-.form-group textarea {
-    min-height: 300px;
-    resize: vertical;
-}
-
-#save-edit {
-    background: #10b981;
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 1rem;
-    transition: background-color 0.2s;
-}
-
-#save-edit:hover {
-    background: #059669;
-}
-
-.status {
-    padding: 1rem;
-    border-radius: 6px;
-    margin: 1rem 0;
-    font-weight: 500;
-}
-
-.status.success {
-    background-color: #dcfce7;
-    color: #166534;
-}
-
-.status.error {
-    background-color: #fee2e2;
-    color: #b91c1c;
-}
-
-/* 内容展示样式 */
-.entry {
-    line-height: 1.8;
-    color: #1f2937;
-    padding: 1.5rem;
-    background-color: white;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-}
-
-.entry h1, .entry h2, .entry h3 {
-    margin-top: 1.5em;
-    margin-bottom: 0.8em;
-    color: #111827;
-}
-
-.entry p {
-    margin-bottom: 1em;
-}
-
-.entry img {
-    max-width: 100%;
-    margin: 1em 0;
-    border-radius: 4px;
-}
-
-.entry pre {
-    background: #f8f9fa;
-    padding: 1em;
-    border-radius: 4px;
-    overflow-x: auto;
-    margin: 1em 0;
-}
-
-.entry code {
-    font-family: monospace;
-}
-
-.entry blockquote {
-    border-left: 4px solid #e5e7eb;
-    padding-left: 1em;
-    margin: 1em 0;
-    color: #6b7280;
-}
-
-/* API状态弹窗 */
-.api-status-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0,0,0,0.5);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-}
-
-.modal-content {
-    background-color: white;
-    border-radius: 8px;
-    width: 90%;
-    max-width: 600px;
-    max-height: 80vh;
-    overflow-y: auto;
-    padding: 1.5rem;
-}
-
-.modal-title {
-    font-size: 1.2rem;
-    margin-bottom: 1rem;
-    color: #1f2937;
-}
-
-.close-modal {
-    background-color: #ef4444;
-    color: white;
-    border: none;
-    padding: 0.5rem 1rem;
-    border-radius: 4px;
-    cursor: pointer;
-    margin-top: 1rem;
-}
-
-/* 加载和错误样式 */
-.loading {
-    text-align: center;
-    padding: 5rem 2rem;
-    color: #4b5563;
-}
-
-.error {
-    color: #dc3545;
-    text-align: center;
-    padding: 50px;
+@media (max-width: 768px) {
+    .cards-container {
+        grid-template-columns: 1fr;
+    }
+    .username-display {
+        display: none; /* 移动端隐藏用户名，节省空间 */
+    }
 }
 
 .no-results {
@@ -449,15 +299,8 @@ h1 {
     color: #6b7280;
 }
 
-/* 响应式样式 */
-@media (max-width: 768px) {
-    .cards-container {
-        grid-template-columns: 1fr;
-    }
-    .username-display {
-        display: none;
-    }
-    h1 {
-        font-size: 2rem;
-    }
+.loading {
+    text-align: center;
+    padding: 5rem 2rem;
+    color: #4b5563;
 }
