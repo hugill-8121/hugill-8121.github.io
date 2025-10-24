@@ -337,6 +337,7 @@
                     }
                     
                     // 关键修复：按group分组而不是category
+                    console.log(filteredBlogs);
                     const blogsByGroup = {};
                     filteredBlogs.forEach(blog => {
                         const groupName = blog.group || '未分类'; // 使用group字段，默认未分类
