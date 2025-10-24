@@ -197,6 +197,10 @@
             // 改为使用现有的blog-container元素
             const blogCardsContainer = document.getElementById('blog-container');
             console.log('容器元素:', blogCardsContainer); // 检查控制台输出是否为null
+            if (!blogCardsContainer) {
+                console.error('未找到blog-container元素！请检查HTML中的ID是否正确');
+                return; // 避免后续报错
+            }
             // 1. 显示加载状态
             blogCardsContainer.innerHTML = '<div class="loading">正在加载博客列表...</div>';
 
