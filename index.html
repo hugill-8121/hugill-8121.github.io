@@ -190,49 +190,50 @@
         }
 
         // 处理博客数据（添加提交信息等元数据）
-        async function processBlogData(blogConfig) {
-            allBlogs = [];
-            allTags.clear();
+        async function processBlogData(blogs) {
+            const blogCardsContainer = document.getElementById('blog-cards');
+            // 1. 显示加载状态（可选，提升体验）
+            blogCardsContainer.innerHTML = '<div class="loading">正在加载博客列表...</div>';
 
-            // 遍历所有分类
-            for (const [categoryName, articles] of Object.entries(blogConfig)) {
-                // 为每篇文章添加元数据
-                for (const article of articles) {
-                    try {
-                        // 获取文件最新提交信息（使用登录用户的token，如果有的话）
-                        const token = localStorage.getItem('githubToken');
-                        const commits = await getFileCommits(
-                            config.owner, 
-                            config.repo, 
-                            article.path, 
-                            config.branch, 
-                            token
-                        );
+            try {
+                // 2. 提取所有文件路径（批量处理的关键）
+                const filePaths = blogs.map(blog => blog.filePath);
+                
+                // 3. 调用批量接口一次性获取所有文件的提交信息
+                const batchResults = await batchGetFileCommits(
+                'hugill-8121',         // 仓库所有者
+                'hugill-8121.github.io', // 仓库名称
+                filePaths,             // 所有文件路径（数组）
+                'main',                // 分支
+                document.getElementById('github-token')?.value.trim() || null, // Token（可选）
+                100                    // 每页数量
+                );
 
-                        // 提取最新提交信息
-                        const lastCommit = commits[0];
-                        const lastModified = lastCommit 
-                            ? new Date(lastCommit.commit.committer.date) 
-                            : null;
-
-                        const articleWithMeta = {
-                            ...article,
-                            category: categoryName,
-                            lastModified: lastModified
-                        };
-                        
-                        allBlogs.push(articleWithMeta);
-                        // 收集标签
-                        article.tags.forEach(tag => allTags.add(tag));
-                    } catch (error) {
-                        console.warn(`获取文章 "${article.alias || article.title}" 的提交信息失败:`, error);
-                        // 即使获取失败也添加文章，只是没有元数据
-                        allBlogs.push({...article, category: categoryName});
-                        article.tags.forEach(tag => allTags.add(tag));
-                    }
+                // 4. 将批量结果转换为 Map（路径 -> 最新提交），方便快速查找
+                const commitMap = new Map();
+                batchResults.forEach(item => {
+                if (!item.error && item.commits.length > 0) {
+                    commitMap.set(item.path, item.commits[0]); // 存储最新提交
                 }
+                });
+
+                // 5. 清空容器，批量渲染卡片
+                blogCardsContainer.innerHTML = '';
+                blogs.forEach(blog => {
+                const latestCommit = commitMap.get(blog.filePath); // 从 Map 中快速获取
+                blogCardsContainer.appendChild(createBlogCard(blog, latestCommit));
+                });
+
+            } catch (error) {
+                // 6. 错误处理
+                blogCardsContainer.innerHTML = `
+                <div class="error">
+                    加载博客失败: ${error.message}
+                    <button onclick="processBlogData(blogs)">重试</button>
+                </div>
+                `;
             }
-        }
+            }
 
         // 渲染标签云
         function renderTags() {
