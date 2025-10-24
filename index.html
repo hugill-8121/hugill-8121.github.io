@@ -399,7 +399,7 @@
                     // 点击卡片跳转到对应文章
                     card.addEventListener('click', () => {
                         // 构建带参数的目标路径
-                        const targetPath = `blog-show.html?group=${encodeURIComponent(article.group)}&blog=${encodeURIComponent(article.alias)}`;
+                        const targetPath = `blog-show.html?group=${encodeURIComponent(article.group)}&blog=${encodeURIComponent(article.title)}`;
                         
                         // 跳转方式适配
                         window.location.href = targetPath;
