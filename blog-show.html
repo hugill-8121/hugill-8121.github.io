@@ -161,13 +161,13 @@
                     throw new Error(`找不到分组: ${group}`);
                 }
 
-                const blogInfo = groupConfig.find(item => item.alias === blog);
+                const blogInfo = groupConfig.find(item => item.title === blog);
                 if (!blogInfo) {
                     throw new Error(`在分组 ${group} 中找不到博客: ${blog}`);
                 }
 
                 // 显示博客标题和标签
-                document.getElementById('blog-title').textContent = blogInfo.alias;
+                document.getElementById('blog-title').textContent = blogInfo.title;
                 const tagsContainer = document.getElementById('blog-tags');
                 blogInfo.tags.forEach(tag => {
                     const tagElement = document.createElement('span');

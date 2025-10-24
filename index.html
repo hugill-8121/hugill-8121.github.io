@@ -98,7 +98,8 @@
             Octokit, 
             getFileCommits, 
             getUserInfo, 
-            getRateLimit 
+            getRateLimit,
+            batchGetFileCommits  // 补充导入缺失的批量获取函数
         } from './js/github-api.js';
 
         // 等待DOM完全加载
@@ -216,8 +217,10 @@
                         // 处理分组数据，提取所有博客和标签
                         Object.keys(blogs).forEach(group => {
                             blogs[group].forEach(blog => {
-                                // 为每个博客添加分组信息
+                                // 为每个博客添加分组信息（关键：使用group字段）
                                 blog.group = group;
+                                // 修复文件路径字段名不一致问题（配置文件中是path，这里统一为filePath）
+                                blog.filePath = blog.path;
                                 allBlogs.push(blog);
                                 
                                 // 收集所有标签
@@ -235,7 +238,7 @@
                             config.repo,          // 使用配置的仓库名称
                             filePaths,           
                             config.branch,        // 使用配置的分支
-                            document.getElementById('github-token')?.value.trim() || null,
+                            githubTokenInput?.value.trim() || null,
                             100,                  // 每页数量
                             (processed) => {      // 进度回调
                                 if (progressEl) {
@@ -259,7 +262,7 @@
                             }
                         });
 
-                        // 5. 批量处理完成后，调用renderBlogs渲染（复用现有逻辑）
+                        // 5. 批量处理完成后，调用renderBlogs渲染
                         renderTags(); // 重新渲染标签云
                         renderBlogs(); // 关键：用统一的渲染函数生成卡片
 
@@ -272,7 +275,7 @@
                             blogContainer.innerHTML = `
                             <div class="error">
                                 加载博客失败: ${error.message}
-                                <button onclick="refreshBlogData()">重试</button>
+                                <button onclick="window.location.reload()">重试</button>
                             </div>
                             `;
                             blogContainer.style.display = 'block';
@@ -313,7 +316,7 @@
                     });
                 }
 
-                // 渲染博客卡片
+                // 渲染博客卡片（修复：使用group作为分组依据）
                 function renderBlogs(filterTag = null) {
                     if (!blogContainer) return;
                     
@@ -333,27 +336,30 @@
                         noResultsEl.style.display = 'none';
                     }
                     
-                    const blogsByCategory = {};
+                    // 关键修复：按group分组而不是category
+                    const blogsByGroup = {};
                     filteredBlogs.forEach(blog => {
-                        if (!blogsByCategory[blog.category]) {
-                            blogsByCategory[blog.category] = [];
+                        const groupName = blog.group || '未分类'; // 使用group字段，默认未分类
+                        if (!blogsByGroup[groupName]) {
+                            blogsByGroup[groupName] = [];
                         }
-                        blogsByCategory[blog.category].push(blog);
+                        blogsByGroup[groupName].push(blog);
                     });
                     
-                    Object.keys(blogsByCategory).forEach(categoryName => {
+                    // 渲染分组
+                    Object.keys(blogsByGroup).forEach(groupName => {
                         const categorySection = document.createElement('section');
                         categorySection.className = 'category-section';
                         
                         const categoryHeader = document.createElement('h2');
                         categoryHeader.className = 'category-title';
-                        categoryHeader.textContent = categoryName;
+                        categoryHeader.textContent = groupName; // 显示分组名称（如grpc）
                         categorySection.appendChild(categoryHeader);
                         
                         const cardsContainer = document.createElement('div');
                         cardsContainer.className = 'cards-container';
                         
-                        blogsByCategory[categoryName].forEach(article => {
+                        blogsByGroup[groupName].forEach(article => {
                             cardsContainer.appendChild(createBlogCard(article));
                         });
                         
@@ -366,6 +372,11 @@
                 function createBlogCard(article) {
                     const card = document.createElement('div');
                     card.className = 'blog-card';
+                    
+                    // 点击卡片跳转到博客详情页
+                    card.addEventListener('click', () => {
+                        window.location.href = `blog-show.html?group=${encodeURIComponent(article.group)}&blog=${encodeURIComponent(article.title)}`;
+                    });
                     
                     const cardTitle = document.createElement('h3');
                     cardTitle.className = 'card-title';
@@ -395,257 +406,148 @@
                         cardMeta.innerHTML = `<i class="fa fa-clock-o"></i> 暂无更新信息`;
                     }
                     card.appendChild(cardMeta);
-
-                    // 点击卡片跳转到对应文章
-                    card.addEventListener('click', () => {
-                        // 构建带参数的目标路径
-                        const targetPath = `blog-show.html?group=${encodeURIComponent(article.group)}&blog=${encodeURIComponent(article.title)}`;
-                        
-                        // 跳转方式适配
-                        window.location.href = targetPath;
-                    });
-
+                    
                     return card;
-                }
-
-                // 刷新博客数据
-                async function refreshBlogData() {
-                    try {
-                        const response = await fetch('blog-config.json');
-                        if (!response.ok) throw new Error('配置文件加载失败');
-                        
-                        const blogConfig = await response.json();
-                        await processBlogData(blogConfig);
-                        return true;
-                    } catch (error) {
-                        console.error('刷新博客数据失败:', error);
-                        throw error;
-                    }
-                }
-
-                // 批量获取文件提交信息（从test.html中移植的核心逻辑）
-                async function batchGetFileCommits(owner, repo, filePaths, branch = 'main', token = null, perPage = 100, onProgress) {
-                    const results = [];
-                    
-                    // 为每个文件创建获取提交的任务
-                    const tasks = filePaths.map(async (path, index) => {
-                        try {
-                            const headers = {
-                                'Accept': 'application/vnd.github.v3+json',
-                                'User-Agent': 'Blog-App'
-                            };
-                            if (token) {
-                                headers['Authorization'] = `token ${token}`;
-                            }
-                            
-                            let allCommits = [];
-                            let page = 1;
-                            let hasMore = true;
-                            
-                            while (hasMore) {
-                                const url = new URL(`https://api.github.com/repos/${owner}/${repo}/commits`);
-                                url.searchParams.append('path', path);
-                                url.searchParams.append('sha', branch);
-                                url.searchParams.append('per_page', perPage);
-                                url.searchParams.append('page', page);
-                                
-                                const response = await fetch(url.toString(), { headers });
-                                
-                                if (!response.ok) {
-                                    const errorData = await response.json().catch(() => ({}));
-                                    throw new Error(errorData.message || `HTTP错误: ${response.status}`);
-                                }
-                                
-                                const commits = await response.json();
-                                if (commits.length === 0) {
-                                    hasMore = false;
-                                } else {
-                                    allCommits = allCommits.concat(commits);
-                                    page++;
-                                }
-                            }
-                            
-                            // 任务完成后调用进度回调
-                            if (onProgress) {
-                                onProgress(index + 1);
-                            }
-                            
-                            return {
-                                path,
-                                commits: allCommits,
-                                total: allCommits.length,
-                                error: null
-                            };
-                            
-                        } catch (error) {
-                            // 错误情况下也更新进度
-                            if (onProgress) {
-                                onProgress(index + 1);
-                            }
-                            return {
-                                path,
-                                commits: [],
-                                total: 0,
-                                error: error.message
-                            };
-                        }
-                    });
-                    
-                    const taskResults = await Promise.all(tasks);
-                    
-                    // 按原始文件路径顺序排列结果
-                    filePaths.forEach(path => {
-                        const result = taskResults.find(item => item.path === path);
-                        if (result) results.push(result);
-                    });
-                    
-                    return results;
-                }
-
-                // 绑定事件
-                function bindEvents() {
-                    // 登录相关事件绑定
-                    if (avatarBtn) {
-                        avatarBtn.addEventListener('click', (e) => {
-                            e.stopPropagation();
-                            if (loginMenu) {
-                                loginMenu.style.display = loginMenu.style.display === 'block' ? 'none' : 'block';
-                            }
-                        });
-                    }
-
-                    document.addEventListener('click', () => {
-                        if (loginMenu) {
-                            loginMenu.style.display = 'none';
-                        }
-                    });
-
-                    if (loginItem) {
-                        loginItem.addEventListener('click', () => {
-                            if (loginForm) {
-                                loginForm.style.display = loginForm.style.display === 'block' ? 'none' : 'block';
-                            }
-                        });
-                    }
-
-                    if (submitLoginBtn) {
-                        submitLoginBtn.addEventListener('click', async () => {
-                            if (githubTokenInput) {
-                                const token = githubTokenInput.value.trim();
-                                if (token) {
-                                    localStorage.setItem('github-token', token);
-                                    checkLoginStatus();
-                                    if (loginForm) {
-                                        loginForm.style.display = 'none';
-                                    }
-                                }
-                            }
-                        });
-                    }
-
-                    if (logoutItem) {
-                        logoutItem.addEventListener('click', () => {
-                            localStorage.removeItem('github-token');
-                            checkLoginStatus();
-                        });
-                    }
-
-                    if (refreshItem) {
-                        refreshItem.addEventListener('click', async () => {
-                            try {
-                                await refreshBlogData();
-                            } catch (error) {
-                                alert(`刷新失败: ${error.message}`);
-                            }
-                        });
-                    }
-
-                    // API状态查询
-                    if (apiStatusItem) {
-                        apiStatusItem.addEventListener('click', async () => {
-                            const token = localStorage.getItem('github-token');
-                            if (!token) {
-                                alert('请先登录');
-                                return;
-                            }
-
-                            try {
-                                const octokit = new Octokit({ auth: token });
-                                const rateLimit = await getRateLimit(octokit);
-                                const userInfo = await getUserInfo(octokit);
-
-                                // 更新弹窗信息
-                                if (modalUserLogin) modalUserLogin.textContent = userInfo.login;
-                                if (modalCoreRemaining) modalCoreRemaining.textContent = rateLimit.core.remaining;
-                                if (modalCoreLimit) modalCoreLimit.textContent = rateLimit.core.limit;
-                                if (modalCoreReset) modalCoreReset.textContent = new Date(rateLimit.core.reset * 1000).toLocaleString();
-                                if (modalSearchRemaining) modalSearchRemaining.textContent = rateLimit.search.remaining;
-                                if (modalSearchLimit) modalSearchLimit.textContent = rateLimit.search.limit;
-                                if (modalSearchReset) modalSearchReset.textContent = new Date(rateLimit.search.reset * 1000).toLocaleString();
-                                if (modalGraphqlRemaining) modalGraphqlRemaining.textContent = rateLimit.graphql.remaining;
-                                if (modalGraphqlLimit) modalGraphqlLimit.textContent = rateLimit.graphql.limit;
-
-                                if (apiStatusModal) apiStatusModal.style.display = 'block';
-                            } catch (error) {
-                                alert(`获取API状态失败: ${error.message}`);
-                            }
-                        });
-                    }
-
-                    if (closeModalBtn) {
-                        closeModalBtn.addEventListener('click', () => {
-                            if (apiStatusModal) {
-                                apiStatusModal.style.display = 'none';
-                            }
-                        });
-                    }
                 }
 
                 // 检查登录状态
                 function checkLoginStatus() {
-                    const token = localStorage.getItem('github-token');
-                    if (token) {
-                        // 已登录状态
-                        if (githubTokenInput) githubTokenInput.value = token;
-                        if (logoutItem) logoutItem.classList.remove('disabled');
-                        if (refreshItem) refreshItem.classList.remove('disabled');
-                        if (apiStatusItem) apiStatusItem.classList.remove('disabled');
-                        if (loginItem) loginItem.style.display = 'none';
-                        
-                        // 获取用户信息
-                        const octokit = new Octokit({ auth: token });
-                        getUserInfo(octokit).then(user => {
-                            if (usernameDisplay) usernameDisplay.textContent = user.login;
-                            if (avatarImg) {
+                    const savedToken = localStorage.getItem('githubToken');
+                    if (savedToken) {
+                        githubTokenInput.value = savedToken;
+                        updateLoginState(true);
+                        // 自动加载用户信息
+                        getUserInfo(savedToken).then(user => {
+                            usernameDisplay.textContent = user.login;
+                            if (user.avatar_url) {
                                 avatarImg.src = user.avatar_url;
                                 avatarImg.style.display = 'block';
+                                defaultAvatar.style.display = 'none';
                             }
-                            if (defaultAvatar) defaultAvatar.style.display = 'none';
-                        }).catch(() => {
-                            // 令牌无效时清除
-                            localStorage.removeItem('github-token');
-                            checkLoginStatus();
+                        }).catch(err => {
+                            console.error('验证Token失败:', err);
+                            logout();
                         });
-                    } else {
-                        // 未登录状态
-                        if (usernameDisplay) usernameDisplay.textContent = '';
-                        if (avatarImg) avatarImg.style.display = 'none';
-                        if (defaultAvatar) defaultAvatar.style.display = 'block';
-                        if (logoutItem) logoutItem.classList.add('disabled');
-                        if (refreshItem) refreshItem.classList.add('disabled');
-                        if (apiStatusItem) apiStatusItem.classList.add('disabled');
-                        if (loginItem) loginItem.style.display = 'block';
-                        if (loginForm) loginForm.style.display = 'none';
                     }
                 }
 
-            } catch (error) {
-                console.error('全局初始化失败:', error);
-                // 显示全局错误信息
-                const loadingEl = document.getElementById('loading');
-                if (loadingEl) {
-                    loadingEl.innerHTML = `<p style="color: red;">初始化失败: ${error.message}</p>`;
+                // 更新登录状态UI
+                function updateLoginState(isLoggedIn) {
+                    if (isLoggedIn) {
+                        loginItem.style.display = 'none';
+                        loginForm.style.display = 'none';
+                        logoutItem.classList.remove('disabled');
+                        refreshItem.classList.remove('disabled');
+                        apiStatusItem.classList.remove('disabled');
+                        usernameDisplay.style.display = 'inline';
+                    } else {
+                        loginItem.style.display = 'flex';
+                        logoutItem.classList.add('disabled');
+                        refreshItem.classList.add('disabled');
+                        apiStatusItem.classList.add('disabled');
+                        usernameDisplay.style.display = 'none';
+                        avatarImg.style.display = 'none';
+                        defaultAvatar.style.display = 'block';
+                    }
                 }
+
+                // 登录处理
+                function login(token) {
+                    localStorage.setItem('githubToken', token);
+                    updateLoginState(true);
+                    initBlog(); // 重新加载博客数据（带权限）
+                }
+
+                // 登出处理
+                function logout() {
+                    localStorage.removeItem('githubToken');
+                    githubTokenInput.value = '';
+                    updateLoginState(false);
+                    initBlog(); // 重新加载博客数据（无权限）
+                }
+
+                // 绑定事件
+                function bindEvents() {
+                    // 头像点击显示菜单
+                    avatarBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        loginMenu.classList.toggle('show');
+                    });
+
+                    // 点击其他区域关闭菜单
+                    document.addEventListener('click', () => {
+                        loginMenu.classList.remove('show');
+                    });
+
+                    // 登录项点击
+                    loginItem.addEventListener('click', () => {
+                        loginForm.style.display = loginForm.style.display === 'none' ? 'block' : 'none';
+                    });
+
+                    // 提交登录
+                    submitLoginBtn.addEventListener('click', () => {
+                        const token = githubTokenInput.value.trim();
+                        if (token) {
+                            login(token);
+                            loginMenu.classList.remove('show');
+                        }
+                    });
+
+                    // 登出项点击
+                    logoutItem.addEventListener('click', () => {
+                        if (!logoutItem.classList.contains('disabled')) {
+                            logout();
+                            loginMenu.classList.remove('show');
+                        }
+                    });
+
+                    // 刷新项点击
+                    refreshItem.addEventListener('click', () => {
+                        if (!refreshItem.classList.contains('disabled')) {
+                            initBlog();
+                            loginMenu.classList.remove('show');
+                        }
+                    });
+
+                    // API状态查询
+                    apiStatusItem.addEventListener('click', async () => {
+                        if (apiStatusItem.classList.contains('disabled')) return;
+                        
+                        const token = localStorage.getItem('githubToken');
+                        if (!token) return;
+                        
+                        try {
+                            const rateData = await getRateLimit(token);
+                            const userData = await getUserInfo(token);
+                            
+                            // 更新弹窗数据
+                            modalUserLogin.textContent = userData.login;
+                            modalCoreRemaining.textContent = rateData.resources.core.remaining;
+                            modalCoreLimit.textContent = rateData.resources.core.limit;
+                            modalCoreReset.textContent = new Date(rateData.resources.core.reset * 1000).toLocaleString();
+                            modalSearchRemaining.textContent = rateData.resources.search.remaining;
+                            modalSearchLimit.textContent = rateData.resources.search.limit;
+                            modalSearchReset.textContent = new Date(rateData.resources.search.reset * 1000).toLocaleString();
+                            modalGraphqlRemaining.textContent = rateData.resources.graphql.remaining;
+                            modalGraphqlLimit.textContent = rateData.resources.graphql.limit;
+                            
+                            // 显示弹窗
+                            apiStatusModal.style.display = 'flex';
+                        } catch (err) {
+                            console.error('获取API状态失败:', err);
+                        }
+                        loginMenu.classList.remove('show');
+                    });
+
+                    // 关闭弹窗
+                    closeModalBtn.addEventListener('click', () => {
+                        apiStatusModal.style.display = 'none';
+                    });
+                }
+
+            } catch (error) {
+                console.error('页面初始化失败:', error);
+                document.getElementById('loading').innerHTML = `<p style="color: red;">初始化失败: ${error.message}</p>`;
             }
         });
     </script>
