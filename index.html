@@ -189,58 +189,71 @@
             }
         }
 
-        // 处理博客数据（添加提交信息等元数据）
-        async function processBlogData(blogs) {
-            // 原来的代码使用了blog-cards，但这个元素不存在
-            // const blogCardsContainer = document.getElementById('blog-cards');
-            
-            // 改为使用现有的blog-container元素
-            const blogCardsContainer = document.getElementById('blog-container');
-            console.log('容器元素:', blogCardsContainer); // 检查控制台输出是否为null
-            if (!blogCardsContainer) {
-                console.error('未找到blog-container元素！请检查HTML中的ID是否正确');
-                return; // 避免后续报错
-            }
-            // 1. 显示加载状态
-            blogCardsContainer.innerHTML = '<div class="loading">正在加载博客列表...</div>';
-
-            try {
-                // 其余代码保持不变...
-                const filePaths = blogs.map(blog => blog.filePath);
+            // 处理博客数据（添加提交信息等元数据）
+            async function processBlogData(blogs) {
+                // 使用现有的blog-container作为容器
+                const blogCardsContainer = document.getElementById('blog-container');
                 
-                const batchResults = await batchGetFileCommits(
-                    'hugill-8121',
-                    'hugill-8121.github.io',
-                    filePaths,
-                    'main',
-                    document.getElementById('github-token')?.value.trim() || null,
-                    100
-                );
+                // 1. 显示加载状态
+                blogCardsContainer.innerHTML = '<div class="loading">正在加载博客列表...</div>';
 
-                const commitMap = new Map();
-                batchResults.forEach(item => {
-                    if (!item.error && item.commits.length > 0) {
-                        commitMap.set(item.path, item.commits[0]);
-                    }
-                });
+                try {
+                    // 2. 提取所有文件路径并存储完整博客数据
+                    const filePaths = blogs.map(blog => blog.filePath);
+                    allBlogs = []; // 清空现有博客数据
+                    allTags.clear(); // 清空现有标签
+                    
+                    // 3. 处理分组数据，提取所有博客和标签
+                    Object.keys(blogs).forEach(group => {
+                        blogs[group].forEach(blog => {
+                            // 为每个博客添加分组信息
+                            blog.group = group;
+                            allBlogs.push(blog);
+                            
+                            // 收集所有标签
+                            blog.tags.forEach(tag => allTags.add(tag));
+                        });
+                    });
 
-                // 清空容器，批量渲染卡片
-                blogCardsContainer.innerHTML = '';
-                blogs.forEach(blog => {
-                    const latestCommit = commitMap.get(blog.filePath);
-                    blogCardsContainer.appendChild(createBlogCard(blog, latestCommit));
-                });
+                    // 4. 调用批量接口一次性获取所有文件的提交信息
+                    const batchResults = await batchGetFileCommits(
+                        config.owner,         // 使用配置的仓库所有者
+                        config.repo,          // 使用配置的仓库名称
+                        filePaths,           
+                        config.branch,        // 使用配置的分支
+                        document.getElementById('github-token')?.value.trim() || null,
+                        100                   
+                    );
 
-            } catch (error) {
-                // 错误处理也需要使用正确的容器
-                blogCardsContainer.innerHTML = `
-                <div class="error">
-                    加载博客失败: ${error.message}
-                    <button onclick="processBlogData(blogs)">重试</button>
-                </div>
-                `;
+                    // 5. 将批量结果转换为 Map（路径 -> 最新提交）
+                    const commitMap = new Map();
+                    batchResults.forEach(item => {
+                        if (!item.error && item.commits.length > 0) {
+                            commitMap.set(item.path, item.commits[0]);
+                            // 为博客添加最后修改时间
+                            const blog = allBlogs.find(b => b.filePath === item.path);
+                            if (blog) {
+                                blog.lastModified = new Date(item.commits[0].commit.committer.date);
+                            }
+                        }
+                    });
+
+                    // 6. 清空容器，准备渲染
+                    blogCardsContainer.innerHTML = '';
+                    
+                    // 7. 按分类渲染博客卡片（使用renderBlogs方法保持一致性）
+                    renderBlogs();
+
+                } catch (error) {
+                    // 8. 错误处理
+                    blogCardsContainer.innerHTML = `
+                    <div class="error">
+                        加载博客失败: ${error.message}
+                        <button onclick="refreshBlogData()">重试</button>
+                    </div>
+                    `;
+                }
             }
-        }
 
         // 渲染标签云
         function renderTags() {
