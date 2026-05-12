@@ -249,13 +249,43 @@ h1 {
     font-size: 0.9rem;
     padding-top: 0.5rem;
     border-top: 1px dashed #e5e7eb;
-    display: flex;
-    align-items: center;
 }
 
 .card-meta i {
     margin-right: 0.3rem;
     font-size: 0.8rem;
+}
+
+/* 提交信息样式 */
+.card-commit-info {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px dashed #e5e7eb;
+    color: #6b7280;
+    font-size: 0.85rem;
+}
+
+.meta-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.4rem;
+}
+
+.meta-row:last-child {
+    margin-bottom: 0;
+}
+
+.meta-row i {
+    margin-right: 0.4rem;
+    font-size: 0.75rem;
+    color: #9ca3af;
+    flex-shrink: 0;
+}
+
+.commit-message {
+    color: #4b5563;
+    font-style: italic;
+    cursor: help;
 }
 
 /* 查看容器样式 */

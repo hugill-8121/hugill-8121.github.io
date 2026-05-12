@@ -292,10 +292,14 @@
             const commitMap = new Map();
             batchResults.forEach(item => {
                 if (!item.error && item.commits.length > 0) {
-                    commitMap.set(item.path, item.commits[0]);
+                    const commit = item.commits[0];
+                    commitMap.set(item.path, commit);
                     const blog = allBlogs.find(b => b.path === item.path);
                     if (blog) {
-                        blog.lastModified = new Date(item.commits[0].commit.committer.date);
+                        blog.lastModified = new Date(commit.commit.committer.date);
+                        // 保存提交人和提交信息
+                        blog.committer = commit.commit.committer.name || commit.author?.login || '未知';
+                        blog.commitMessage = commit.commit.message.split('\n')[0]; // 只取第一行
                     }
                 }
             });
@@ -381,6 +385,13 @@
             });
         }
 
+        // 截断文本工具函数
+        function truncateText(text, maxLength) {
+            if (!text) return '';
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
+        }
+
         // 创建博客卡片
         function createBlogCard(article) {
             const card = document.createElement('div');
@@ -404,11 +415,40 @@
             const cardMeta = document.createElement('div');
             cardMeta.className = 'card-meta';
             if (article.lastModified) {
-                cardMeta.innerHTML = `<i class="fa fa-clock-o"></i> 最后更新: ${article.lastModified.toLocaleString()}`;
+                const metaContent = `
+                    <div class="meta-row">
+                        <i class="fa fa-clock-o"></i> 最后更新: ${article.lastModified.toLocaleString()}
+                    </div>
+                `;
+                cardMeta.innerHTML = metaContent;
             } else {
-                cardMeta.innerHTML = `<i class="fa fa-clock-o"></i> 暂无更新信息`;
+                cardMeta.innerHTML = `<div class="meta-row"><i class="fa fa-clock-o"></i> 暂无更新信息</div>`;
             }
-            card.appendChild(cardMeta);
+
+            // 添加提交人信息
+            if (article.committer || article.commitMessage) {
+                const commitInfo = document.createElement('div');
+                commitInfo.className = 'card-commit-info';
+
+                if (article.committer) {
+                    const committerEl = document.createElement('div');
+                    committerEl.className = 'meta-row';
+                    committerEl.innerHTML = `<i class="fa fa-user"></i> 提交人: ${article.committer}`;
+                    commitInfo.appendChild(committerEl);
+                }
+
+                if (article.commitMessage) {
+                    const messageEl = document.createElement('div');
+                    messageEl.className = 'meta-row commit-message';
+                    messageEl.title = article.commitMessage;
+                    messageEl.innerHTML = `<i class="fa fa-code-branch"></i> ${truncateText(article.commitMessage, 50)}`;
+                    commitInfo.appendChild(messageEl);
+                }
+
+                card.appendChild(commitInfo);
+            } else {
+                card.appendChild(cardMeta);
+            }
 
             // 点击卡片进入查看模式
             card.addEventListener('click', () => {
