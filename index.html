@@ -582,6 +582,42 @@
                 updateLoginState(false);
             });
 
+            dom.refreshItem.addEventListener('click', async () => {
+                dom.refreshItem.classList.add('disabled');
+                await initBlog();
+                dom.refreshItem.classList.remove('disabled');
+                dom.loginMenu.classList.remove('show');
+            });
+
+            dom.apiStatusItem.addEventListener('click', async () => {
+                const token = localStorage.getItem('github-token');
+                if (!token) {
+                    alert('请先登录');
+                    return;
+                }
+
+                try {
+                    const [user, rateLimit] = await Promise.all([
+                        getUserInfo(token),
+                        getRateLimit(token)
+                    ]);
+
+                    document.getElementById('modal-user-login').textContent = user.login;
+                    document.getElementById('modal-core-remaining').textContent = rateLimit.resources.core.remaining;
+                    document.getElementById('modal-core-limit').textContent = rateLimit.resources.core.limit;
+                    document.getElementById('modal-core-reset').textContent = new Date(rateLimit.resources.core.reset * 1000).toLocaleString();
+                    document.getElementById('modal-search-remaining').textContent = rateLimit.resources.search.remaining;
+                    document.getElementById('modal-search-limit').textContent = rateLimit.resources.search.limit;
+                    document.getElementById('modal-search-reset').textContent = new Date(rateLimit.resources.search.reset * 1000).toLocaleString();
+                    document.getElementById('modal-graphql-remaining').textContent = rateLimit.resources.graphql.remaining;
+                    document.getElementById('modal-graphql-limit').textContent = rateLimit.resources.graphql.limit;
+
+                    dom.apiStatusModal.style.display = 'flex';
+                } catch (error) {
+                    alert('获取API状态失败: ' + error.message);
+                }
+            });
+
             dom.submitLoginBtn.addEventListener('click', () => {
                 const token = dom.githubTokenInput.value.trim();
                 if (token) {
