@@ -704,10 +704,10 @@ h1 {
     gap: 0.5rem;
 }
 
-/* 左侧侧边栏 - 右侧与主页内容左侧对齐 */
+/* 左侧侧边栏 - 右边与标签云左边对齐 */
 .sidebar-left {
     position: fixed;
-    right: calc(100vw - 1rem + 20px); /* 右侧与body内容左侧对齐，留20px间距 */
+    left: calc((100vw - 1200px) / 2 + 1rem - 240px); /* 右边与标签云左边对齐 */
     top: 10rem; /* 页首下方 */
     width: 220px;
     background-color: white;
@@ -718,6 +718,15 @@ h1 {
     overflow-y: auto;
     z-index: 50;
     display: block; /* 默认显示 */
+}
+
+/* 页面缩小时隐藏侧边栏 */
+@media (max-width: 1400px) {
+    .sidebar-left,
+    .edit-sidebar-left,
+    .edit-sidebar-right {
+        display: none !important;
+    }
 }
 
 /* 博客列表容器不需要padding-left */

@@ -95,11 +95,20 @@
 
     <!-- 资源树右键菜单 -->
     <div class="context-menu" id="resource-context-menu">
-        <div class="context-menu-item" id="res-upload-file">
+        <div class="context-menu-item" id="res-copy-path">
+            <i class="fa fa-copy"></i> 复制路径
+        </div>
+        <div class="context-menu-item" id="res-upload-file" style="display: none;">
             <i class="fa fa-upload"></i> 上传资源文件
         </div>
-        <div class="context-menu-item" id="res-new-folder">
+        <div class="context-menu-item" id="res-new-folder" style="display: none;">
             <i class="fa fa-folder-o"></i> 新增文件夹
+        </div>
+        <div class="context-menu-item" id="res-delete-folder" style="display: none;">
+            <i class="fa fa-trash-o"></i> 删除文件夹
+        </div>
+        <div class="context-menu-item" id="res-delete-file" style="display: none;">
+            <i class="fa fa-trash-o"></i> 删除文件
         </div>
     </div>
 
@@ -160,7 +169,7 @@
                         <span class="commit-value" id="commit-message"></span>
                     </div>
                     <div class="commit-row">
-                        <span class="commit-label"><i class="fa fa-hashtag"></i> Commit SHA:</span>
+                        <span class="commit-label"><i class="fa fa-hashtag"></i> 提交HASH:</span>
                         <a class="commit-value commit-sha" id="commit-sha" target="_blank"></a>
                     </div>
                 </div>
@@ -333,8 +342,11 @@
             ctxOpenFile: document.getElementById('ctx-open-file'),
             ctxNewFolder: document.getElementById('ctx-new-folder'),
             resourceContextMenu: document.getElementById('resource-context-menu'),
+            resCopyPath: document.getElementById('res-copy-path'),
             resUploadFile: document.getElementById('res-upload-file'),
-            resNewFolder: document.getElementById('res-new-folder')
+            resNewFolder: document.getElementById('res-new-folder'),
+            resDeleteFolder: document.getElementById('res-delete-folder'),
+            resDeleteFile: document.getElementById('res-delete-file')
         };
 
         // 编辑界面全局变量
@@ -343,6 +355,10 @@
         let currentEditFile = null;
         let editedContents = new Map(); // 存储每个标签页的编辑状态
         let selectedMonths = new Set();
+        // 资源文件夹缓存（key: 文件夹路径, value: 文件数组）
+        let resourceFolderCache = new Map();
+        // 待提交的资源文件缓存（key: 文件路径, value: 文件内容）
+        let pendingResourceFiles = new Map();
         let currentFilterTag = null;
         let globalCommitMap = new Map(); // 全局commit信息缓存 {path: commitInfo}
         let isEditMode = false; // 编辑模式标志，true=编辑，false=新增
@@ -587,8 +603,8 @@
                 folderEl.innerHTML = '<i class="fa fa-folder-o"></i> <span class="folder-name">' + group + '</span>';
                 dom.fileTree.appendChild(folderEl);
 
-                // 双击展开/收起文件夹
-                folderEl.addEventListener('dblclick', (e) => {
+                // 单击展开/收起文件夹
+                folderEl.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const icon = folderEl.querySelector('i');
                     const isExpanded = folderEl.classList.contains('expanded');
@@ -641,8 +657,8 @@
                     fileEl.dataset.path = blog.path;
                     fileEl.dataset.title = blog.title;
 
-                    // 双击打开文件
-                    fileEl.addEventListener('dblclick', () => {
+                    // 单击打开文件
+                    fileEl.addEventListener('click', () => {
                         openFileInTab(blog);
                     });
 
@@ -663,37 +679,39 @@
             dom.fileContextMenu.style.left = e.pageX + 'px';
             dom.fileContextMenu.style.top = e.pageY + 'px';
 
-            // 复制路径
+            // 复制路径（路径前加/）
+            dom.ctxCopyPath.style.display = 'flex';
             dom.ctxCopyPath.onclick = () => {
-                navigator.clipboard.writeText(`blog/${groupName}/`);
+                navigator.clipboard.writeText(`/blog/${groupName}/`);
                 dom.fileContextMenu.style.display = 'none';
             };
 
             // 打开文件（文件夹不显示此选项）
             dom.ctxOpenFile.style.display = 'none';
 
-            // 新增文件夹选项
-            dom.ctxNewFolder.style.display = 'flex';
-            dom.ctxNewFolder.onclick = () => {
-                const folderName = prompt('请输入文件夹名称：');
-                if (folderName && folderName.trim()) {
-                    createBlogFolder(folderName.trim(), groupName);
-                }
-                dom.fileContextMenu.style.display = 'none';
-            };
+            // 新增文件夹选项（文件夹不支持）
+            dom.ctxNewFolder.style.display = 'none';
         }
 
-        // 创建博客文件夹
-        async function createBlogFolder(folderName, parentGroup) {
-            const token = localStorage.getItem('github-token');
-            if (!token) {
-                alert('请先登录');
-                return;
-            }
+        // 显示文件右键菜单
+        function showFileContextMenu(e, blog) {
+            dom.fileContextMenu.style.display = 'block';
+            dom.fileContextMenu.style.left = e.pageX + 'px';
+            dom.fileContextMenu.style.top = e.pageY + 'px';
 
-            try {
-                const octokit = new Octokit({ auth: token });
-                const folderPath = `blog/${parentGroup}/${folderName}/.gitkeep`;
+            // 复制路径（路径前加/）
+            dom.ctxCopyPath.style.display = 'flex';
+            dom.ctxCopyPath.onclick = () => {
+                navigator.clipboard.writeText(`/${blog.path}`);
+                dom.fileContextMenu.style.display = 'none';
+            };
+
+            // 打开文件（文件不支持）
+            dom.ctxOpenFile.style.display = 'none';
+
+            // 新增文件夹选项（文件不支持）
+            dom.ctxNewFolder.style.display = 'none';
+        }
 
                 await octokit.rest.repos.createOrUpdateFileContents({
                     owner: config.owner,
@@ -742,99 +760,191 @@
             resourceFolder.className = 'tree-item folder';
             resourceFolder.dataset.path = 'asserts';
             resourceFolder.dataset.name = 'asserts';
+            resourceFolder.dataset.type = 'folder';
             resourceFolder.innerHTML = '<i class="fa fa-folder-o"></i> <span class="folder-name">asserts</span>';
 
-            // 双击展开/收起文件夹
-            resourceFolder.addEventListener('dblclick', (e) => {
+            // 单击展开/收起文件夹
+            resourceFolder.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const icon = resourceFolder.querySelector('i');
-                const isExpanded = resourceFolder.classList.contains('expanded');
-                if (isExpanded) {
-                    resourceFolder.classList.remove('expanded');
-                    icon.className = 'fa fa-folder-o';
-                    // 收起子项
-                    let nextSibling = resourceFolder.nextElementSibling;
-                    while (nextSibling && nextSibling.classList.contains('tree-item')) {
-                        nextSibling.style.display = 'none';
-                        nextSibling = nextSibling.nextElementSibling;
-                    }
-                } else {
-                    resourceFolder.classList.add('expanded');
-                    icon.className = 'fa fa-folder-open-o';
-                    // 展开子项
-                    let nextSibling = resourceFolder.nextElementSibling;
-                    while (nextSibling && nextSibling.classList.contains('tree-item')) {
-                        nextSibling.style.display = 'flex';
-                        nextSibling = nextSibling.nextElementSibling;
-                    }
-                }
+                toggleResourceFolder(resourceFolder, 'asserts');
             });
 
             // 右键菜单
             resourceFolder.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                showResourceContextMenu(e, 'asserts');
+                showResourceFolderContextMenu(e, 'asserts');
             });
 
             dom.resourceTree.appendChild(resourceFolder);
 
-            // 这里可以通过API获取asserts目录下的文件列表
-            // 暂时显示一些示例资源
-            const sampleResources = [
-                { name: '黑白混.png', path: '/asserts/黑白混.png' }
-            ];
+            // 渲染缓存中的文件和子文件夹
+            renderCachedResourceItems('asserts', resourceFolder);
+        }
 
-            sampleResources.forEach(resource => {
-                const resourceEl = document.createElement('div');
-                resourceEl.className = 'tree-item file';
-                resourceEl.style.display = 'none'; // 默认收起
-                resourceEl.innerHTML = `<i class="fa fa-image"></i> ${resource.name}`;
-                resourceEl.style.cursor = 'pointer';
+        // 展开/收起资源文件夹
+        function toggleResourceFolder(folderEl, folderPath) {
+            const icon = folderEl.querySelector('i');
+            const isExpanded = folderEl.classList.contains('expanded');
 
-                // 双击打开资源
-                resourceEl.addEventListener('dblclick', () => {
-                    window.open(resource.path, '_blank');
-                });
+            if (isExpanded) {
+                folderEl.classList.remove('expanded');
+                icon.className = 'fa fa-folder-o';
+                // 收起子项
+                let nextSibling = folderEl.nextElementSibling;
+                while (nextSibling && nextSibling.classList.contains('tree-item')) {
+                    if (nextSibling.dataset.parentPath === folderPath) {
+                        nextSibling.style.display = 'none';
+                    } else {
+                        break;
+                    }
+                    nextSibling = nextSibling.nextElementSibling;
+                }
+            } else {
+                folderEl.classList.add('expanded');
+                icon.className = 'fa fa-folder-open-o';
+                // 展开子项
+                let nextSibling = folderEl.nextElementSibling;
+                while (nextSibling && nextSibling.classList.contains('tree-item')) {
+                    if (nextSibling.dataset.parentPath === folderPath) {
+                        nextSibling.style.display = 'flex';
+                    } else {
+                        break;
+                    }
+                    nextSibling = nextSibling.nextElementSibling;
+                }
+            }
+        }
 
-                dom.resourceTree.appendChild(resourceEl);
+        // 渲染缓存中的资源项
+        function renderCachedResourceItems(parentPath, parentEl) {
+            const cachedItems = resourceFolderCache.get(parentPath) || [];
+
+            cachedItems.forEach(item => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'tree-item';
+                itemEl.dataset.path = item.path;
+                itemEl.dataset.parentPath = parentPath;
+                itemEl.style.display = 'none'; // 默认收起
+
+                if (item.type === 'folder') {
+                    itemEl.classList.add('folder');
+                    itemEl.dataset.type = 'folder';
+                    itemEl.innerHTML = `<i class="fa fa-folder-o"></i> <span class="folder-name">${item.name}</span>`;
+
+                    // 单击展开/收起
+                    itemEl.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        toggleResourceFolder(itemEl, item.path);
+                    });
+
+                    // 右键菜单
+                    itemEl.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        showResourceFolderContextMenu(e, item.path);
+                    });
+                } else {
+                    itemEl.classList.add('file');
+                    itemEl.dataset.type = 'file';
+                    itemEl.innerHTML = `<i class="fa fa-file-image-o"></i> ${item.name}`;
+
+                    // 右键菜单
+                    itemEl.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        showResourceFileContextMenu(e, item.path);
+                    });
+                }
+
+                parentEl.parentNode.insertBefore(itemEl, parentEl.nextElementSibling);
             });
         }
 
-        // 显示资源树右键菜单
-        function showResourceContextMenu(e, folderPath) {
+        // 显示资源文件夹右键菜单
+        function showResourceFolderContextMenu(e, folderPath) {
             dom.resourceContextMenu.style.display = 'block';
             dom.resourceContextMenu.style.left = e.pageX + 'px';
             dom.resourceContextMenu.style.top = e.pageY + 'px';
             dom.resourceContextMenu.dataset.folderPath = folderPath;
+            dom.resourceContextMenu.dataset.itemType = 'folder';
+
+            // 显示所有选项
+            dom.resCopyPath.style.display = 'flex';
+            dom.resUploadFile.style.display = 'flex';
+            dom.resNewFolder.style.display = 'flex';
+            dom.resDeleteFolder.style.display = 'flex';
+            dom.resDeleteFile.style.display = 'none';
+
+            // 复制路径（路径前加/）
+            dom.resCopyPath.onclick = () => {
+                navigator.clipboard.writeText(`/${folderPath}`);
+                dom.resourceContextMenu.style.display = 'none';
+            };
 
             // 上传资源文件
             dom.resUploadFile.onclick = () => {
                 const input = document.createElement('input');
                 input.type = 'file';
                 input.accept = '*/*';
-                input.onchange = async (e) => {
+                input.onchange = (e) => {
                     const file = e.target.files[0];
                     if (file) {
-                        await uploadResourceFile(file, folderPath);
+                        cacheAndUploadResourceFile(file, folderPath);
                     }
                 };
                 input.click();
                 dom.resourceContextMenu.style.display = 'none';
             };
 
-            // 新增文件夹
+            // 新增文件夹（缓存，不直接commit）
             dom.resNewFolder.onclick = () => {
                 const folderName = prompt('请输入文件夹名称：');
                 if (folderName && folderName.trim()) {
-                    createResourceFolder(folderName.trim(), folderPath);
+                    cacheResourceFolder(folderName.trim(), folderPath);
+                }
+                dom.resourceContextMenu.style.display = 'none';
+            };
+
+            // 删除文件夹（缓存，检查是否有下属文件）
+            dom.resDeleteFolder.onclick = () => {
+                deleteResourceFolder(folderPath);
+                dom.resourceContextMenu.style.display = 'none';
+            };
+        }
+
+        // 显示资源文件右键菜单
+        function showResourceFileContextMenu(e, filePath) {
+            dom.resourceContextMenu.style.display = 'block';
+            dom.resourceContextMenu.style.left = e.pageX + 'px';
+            dom.resourceContextMenu.style.top = e.pageY + 'px';
+            dom.resourceContextMenu.dataset.filePath = filePath;
+            dom.resourceContextMenu.dataset.itemType = 'file';
+
+            // 显示选项
+            dom.resCopyPath.style.display = 'flex';
+            dom.resUploadFile.style.display = 'none';
+            dom.resNewFolder.style.display = 'none';
+            dom.resDeleteFolder.style.display = 'none';
+            dom.resDeleteFile.style.display = 'flex';
+
+            // 复制路径（路径前加/）
+            dom.resCopyPath.onclick = () => {
+                navigator.clipboard.writeText(`/${filePath}`);
+                dom.resourceContextMenu.style.display = 'none';
+            };
+
+            // 删除文件
+            dom.resDeleteFile.onclick = () => {
+                if (confirm('确定要删除这个文件吗？')) {
+                    deleteResourceFile(filePath);
                 }
                 dom.resourceContextMenu.style.display = 'none';
             };
         }
 
-        // 上传资源文件
-        async function uploadResourceFile(file, folderPath) {
+        // 缓存并上传资源文件
+        async function cacheAndUploadResourceFile(file, folderPath) {
             const token = localStorage.getItem('github-token');
             if (!token) {
                 alert('请先登录');
@@ -842,53 +952,133 @@
             }
 
             try {
-                const octokit = new Octokit({ auth: token });
                 const filePath = `${folderPath}/${file.name}`;
                 const content = await readFileAsBase64(file);
 
-                await octokit.rest.repos.createOrUpdateFileContents({
-                    owner: config.owner,
-                    repo: config.repo,
-                    path: filePath,
-                    message: `上传资源文件: ${file.name}`,
-                    content: content,
-                    branch: config.branch
-                });
+                // 添加到缓存
+                pendingResourceFiles.set(filePath, { file, content, folderPath });
 
-                alert('上传成功！');
+                // 添加到文件夹缓存
+                if (!resourceFolderCache.has(folderPath)) {
+                    resourceFolderCache.set(folderPath, []);
+                }
+                const items = resourceFolderCache.get(folderPath);
+                if (!items.find(item => item.path === filePath)) {
+                    items.push({ name: file.name, path: filePath, type: 'file' });
+                }
+
+                alert('文件已缓存，将在提交时一起上传！');
                 renderResourceTree();
             } catch (error) {
-                console.error('上传失败:', error);
-                alert(`上传失败: ${error.message}`);
+                console.error('缓存文件失败:', error);
+                alert(`缓存文件失败: ${error.message}`);
             }
         }
 
-        // 创建资源文件夹（创建.gitkeep文件）
-        async function createResourceFolder(folderName, parentPath) {
+        // 缓存资源文件夹（不直接commit）
+        function cacheResourceFolder(folderName, parentPath) {
+            const folderPath = `${parentPath}/${folderName}`;
+
+            // 添加到缓存
+            if (!resourceFolderCache.has(parentPath)) {
+                resourceFolderCache.set(parentPath, []);
+            }
+            const items = resourceFolderCache.get(parentPath);
+            if (!items.find(item => item.path === folderPath)) {
+                items.push({ name: folderName, path: folderPath, type: 'folder' });
+            }
+
+            // 初始化空文件夹缓存
+            if (!resourceFolderCache.has(folderPath)) {
+                resourceFolderCache.set(folderPath, []);
+            }
+
+            alert('文件夹已缓存，将在提交时一起创建！');
+            renderResourceTree();
+        }
+
+        // 删除资源文件夹（检查是否有下属缓存文件）
+        function deleteResourceFolder(folderPath) {
+            // 检查是否有下属文件（缓存中）
+            const hasCachedFiles = Array.from(pendingResourceFiles.keys()).some(path =>
+                path.startsWith(folderPath + '/')
+            );
+
+            if (hasCachedFiles) {
+                alert('无法删除：该文件夹下有待提交的文件，请先处理这些文件。');
+                return;
+            }
+
+            // 从缓存中删除
+            resourceFolderCache.delete(folderPath);
+
+            // 从父文件夹缓存中删除
+            for (const [parentPath, items] of resourceFolderCache.entries()) {
+                const index = items.findIndex(item => item.path === folderPath);
+                if (index !== -1) {
+                    items.splice(index, 1);
+                    break;
+                }
+            }
+
+            alert('文件夹已从缓存中删除！');
+            renderResourceTree();
+        }
+
+        // 删除资源文件
+        function deleteResourceFile(filePath) {
+            // 从缓存中删除
+            pendingResourceFiles.delete(filePath);
+
+            // 从文件夹缓存中删除
+            for (const [folderPath, items] of resourceFolderCache.entries()) {
+                const index = items.findIndex(item => item.path === filePath);
+                if (index !== -1) {
+                    items.splice(index, 1);
+                    break;
+                }
+            }
+
+            alert('文件已从缓存中删除！');
+            renderResourceTree();
+        }
+
+        // 上传所有缓存的资源文件
+        async function uploadAllPendingResources() {
             const token = localStorage.getItem('github-token');
             if (!token) {
                 alert('请先登录');
-                return;
+                return false;
+            }
+
+            if (pendingResourceFiles.size === 0) {
+                return true;
             }
 
             try {
                 const octokit = new Octokit({ auth: token });
-                const folderPath = parentPath ? `${parentPath}/${folderName}/.gitkeep` : `${folderName}/.gitkeep`;
 
-                await octokit.rest.repos.createOrUpdateFileContents({
-                    owner: config.owner,
-                    repo: config.repo,
-                    path: folderPath,
-                    message: `创建文件夹: ${folderName}`,
-                    content: '',
-                    branch: config.branch
-                });
+                // 上传所有缓存文件
+                for (const [filePath, data] of pendingResourceFiles.entries()) {
+                    await octokit.rest.repos.createOrUpdateFileContents({
+                        owner: config.owner,
+                        repo: config.repo,
+                        path: filePath,
+                        message: `上传资源文件: ${data.file.name}`,
+                        content: data.content,
+                        branch: config.branch
+                    });
+                }
 
-                alert('文件夹创建成功！');
-                renderResourceTree();
+                // 清空缓存
+                pendingResourceFiles.clear();
+
+                alert('所有缓存资源文件已上传！');
+                return true;
             } catch (error) {
-                console.error('创建文件夹失败:', error);
-                alert(`创建文件夹失败: ${error.message}`);
+                console.error('上传缓存文件失败:', error);
+                alert(`上传缓存文件失败: ${error.message}`);
+                return false;
             }
         }
 
@@ -929,6 +1119,9 @@
         document.addEventListener('click', () => {
             if (dom.fileContextMenu) {
                 dom.fileContextMenu.style.display = 'none';
+            }
+            if (dom.resourceContextMenu) {
+                dom.resourceContextMenu.style.display = 'none';
             }
         });
 
@@ -1486,6 +1679,8 @@
         function bindEvents() {
             // 容器切换事件
             dom.backToList.addEventListener('click', () => {
+                // 修改URL
+                window.history.pushState({}, '', window.location.pathname);
                 // 切换到列表容器，显示左侧时间过滤器
                 dom.containers.list.classList.add('container-active');
                 dom.containers.list.classList.remove('container-hidden');
@@ -1629,6 +1824,8 @@
 
                     // 刷新博客列表
                     setTimeout(async () => {
+                        // 上传缓存的资源文件
+                        await uploadAllPendingResources();
                         await initBlog();
                         // 如果是新增的文件，可能需要切换到查看模式
                         if (!isEditMode) {
