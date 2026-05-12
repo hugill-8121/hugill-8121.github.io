@@ -396,12 +396,12 @@
         function createBlogCard(article) {
             const card = document.createElement('div');
             card.className = 'blog-card';
-            
+
             const cardTitle = document.createElement('h3');
             cardTitle.className = 'card-title';
             cardTitle.textContent = article.title;
             card.appendChild(cardTitle);
-            
+
             const cardTags = document.createElement('div');
             cardTags.className = 'card-tags';
             article.tags.forEach(tag => {
@@ -411,44 +411,57 @@
                 cardTags.appendChild(tagSpan);
             });
             card.appendChild(cardTags);
-            
-            const cardMeta = document.createElement('div');
-            cardMeta.className = 'card-meta';
-            if (article.lastModified) {
-                const metaContent = `
-                    <div class="meta-row">
-                        <i class="fa fa-clock-o"></i> 最后更新: ${article.lastModified.toLocaleString()}
-                    </div>
-                `;
-                cardMeta.innerHTML = metaContent;
-            } else {
-                cardMeta.innerHTML = `<div class="meta-row"><i class="fa fa-clock-o"></i> 暂无更新信息</div>`;
-            }
 
-            // 添加提交人信息
-            if (article.committer || article.commitMessage) {
-                const commitInfo = document.createElement('div');
-                commitInfo.className = 'card-commit-info';
+            // 卡片底部信息区：三行显示
+            const cardFooter = document.createElement('div');
+            cardFooter.className = 'card-footer';
 
-                if (article.committer) {
-                    const committerEl = document.createElement('div');
-                    committerEl.className = 'meta-row';
-                    committerEl.innerHTML = `<i class="fa fa-user"></i> 提交人: ${article.committer}`;
-                    commitInfo.appendChild(committerEl);
-                }
+            // 第1行：更新人
+            const committerRow = document.createElement('div');
+            committerRow.className = 'footer-row';
+            const committerLabel = document.createElement('span');
+            committerLabel.className = 'footer-label';
+            committerLabel.textContent = '更新人:';
+            const committerValue = document.createElement('span');
+            committerValue.className = 'footer-value';
+            committerValue.textContent = article.committer || '未知';
+            committerRow.appendChild(committerLabel);
+            committerRow.appendChild(committerValue);
+            cardFooter.appendChild(committerRow);
 
-                if (article.commitMessage) {
-                    const messageEl = document.createElement('div');
-                    messageEl.className = 'meta-row commit-message';
-                    messageEl.title = article.commitMessage;
-                    messageEl.innerHTML = `<i class="fa fa-code-branch"></i> ${truncateText(article.commitMessage, 50)}`;
-                    commitInfo.appendChild(messageEl);
-                }
+            // 第2行：更新时间
+            const timeRow = document.createElement('div');
+            timeRow.className = 'footer-row';
+            const timeLabel = document.createElement('span');
+            timeLabel.className = 'footer-label';
+            timeLabel.textContent = '更新时间:';
+            const timeValue = document.createElement('span');
+            timeValue.className = 'footer-value';
+            timeValue.textContent = article.lastModified
+                ? article.lastModified.toLocaleString()
+                : '暂无';
+            timeRow.appendChild(timeLabel);
+            timeRow.appendChild(timeValue);
+            cardFooter.appendChild(timeRow);
 
-                card.appendChild(commitInfo);
-            } else {
-                card.appendChild(cardMeta);
-            }
+            // 第3行：更新commit信息
+            const messageRow = document.createElement('div');
+            messageRow.className = 'footer-row';
+            const messageLabel = document.createElement('span');
+            messageLabel.className = 'footer-label';
+            messageLabel.textContent = 'commit:';
+            const messageValue = document.createElement('span');
+            messageValue.className = 'footer-value';
+            messageValue.className = 'footer-value commit-msg';
+            messageValue.title = article.commitMessage || '';
+            messageValue.textContent = article.commitMessage
+                ? truncateText(article.commitMessage, 60)
+                : '无';
+            messageRow.appendChild(messageLabel);
+            messageRow.appendChild(messageValue);
+            cardFooter.appendChild(messageRow);
+
+            card.appendChild(cardFooter);
 
             // 点击卡片进入查看模式
             card.addEventListener('click', () => {
@@ -456,7 +469,7 @@
                 switchToShow(article, dom);
                 loadBlogContent(article, dom, renderMarkdown);
             });
-            
+
             return card;
         }
 
@@ -576,6 +589,11 @@
             dom.loginItem.addEventListener('click', (e) => {
                 e.stopPropagation();
                 dom.loginForm.style.display = dom.loginForm.style.display === 'none' ? 'block' : 'none';
+            });
+
+            // 防止登录表单点击时关闭菜单
+            dom.loginForm.addEventListener('click', (e) => {
+                e.stopPropagation();
             });
 
             dom.logoutItem.addEventListener('click', () => {

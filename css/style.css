@@ -256,36 +256,47 @@ h1 {
     font-size: 0.8rem;
 }
 
-/* 提交信息样式 */
-.card-commit-info {
-    margin-top: 0.75rem;
+/* 卡片底部信息区样式 */
+.card-footer {
+    margin-top: 1rem;
     padding-top: 0.75rem;
     border-top: 1px dashed #e5e7eb;
+    font-size: 0.75rem;
     color: #6b7280;
-    font-size: 0.85rem;
 }
 
-.meta-row {
+.footer-row {
     display: flex;
     align-items: center;
-    margin-bottom: 0.4rem;
+    margin-bottom: 0.35rem;
+    line-height: 1.4;
 }
 
-.meta-row:last-child {
+.footer-row:last-child {
     margin-bottom: 0;
 }
 
-.meta-row i {
-    margin-right: 0.4rem;
-    font-size: 0.75rem;
-    color: #9ca3af;
+.footer-label {
     flex-shrink: 0;
+    color: #9ca3af;
+    margin-right: 0.5rem;
 }
 
-.commit-message {
+.footer-value {
     color: #4b5563;
-    font-style: italic;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.footer-value.commit-msg {
+    color: #4b5563;
     cursor: help;
+}
+
+.footer-value.commit-msg:hover {
+    color: #1f2937;
 }
 
 /* 查看容器样式 */
