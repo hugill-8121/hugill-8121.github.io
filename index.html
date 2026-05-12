@@ -392,6 +392,12 @@
             return text.substring(0, maxLength) + '...';
         }
 
+        // 检查文本是否适合一行显示
+        function isTextTooLong(text, maxLength) {
+            if (!text) return false;
+            return text.length > maxLength;
+        }
+
         // 创建博客卡片
         function createBlogCard(article) {
             const card = document.createElement('div');
@@ -444,22 +450,20 @@
             timeRow.appendChild(timeValue);
             cardFooter.appendChild(timeRow);
 
-            // 第3行：更新commit信息
-            const messageRow = document.createElement('div');
-            messageRow.className = 'footer-row';
-            const messageLabel = document.createElement('span');
-            messageLabel.className = 'footer-label';
-            messageLabel.textContent = 'commit:';
-            const messageValue = document.createElement('span');
-            messageValue.className = 'footer-value';
-            messageValue.className = 'footer-value commit-msg';
-            messageValue.title = article.commitMessage || '';
-            messageValue.textContent = article.commitMessage
-                ? truncateText(article.commitMessage, 60)
-                : '无';
-            messageRow.appendChild(messageLabel);
-            messageRow.appendChild(messageValue);
-            cardFooter.appendChild(messageRow);
+            // 第3行：更新commit信息（仅显示一行，过长则忽略）
+            if (article.commitMessage && article.commitMessage.length <= 60) {
+                const messageRow = document.createElement('div');
+                messageRow.className = 'footer-row';
+                const messageLabel = document.createElement('span');
+                messageLabel.className = 'footer-label';
+                messageLabel.textContent = 'commit:';
+                const messageValue = document.createElement('span');
+                messageValue.className = 'footer-value commit-msg';
+                messageValue.textContent = article.commitMessage;
+                messageRow.appendChild(messageLabel);
+                messageRow.appendChild(messageValue);
+                cardFooter.appendChild(messageRow);
+            }
 
             card.appendChild(cardFooter);
 

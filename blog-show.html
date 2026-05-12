@@ -6,17 +6,43 @@
     <title>博客展示</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
 </head>
 <body>
     <div class="container">
-        <button id="back-to-index" style="margin-bottom: 20px;">← 返回博客列表</button>
+        <button id="back-to-index" class="back-btn"><i class="fa fa-arrow-left"></i> 返回博客列表</button>
+
         <div class="header">
             <h1 id="blog-title"></h1>
             <div class="tags" id="blog-tags"></div>
-            <button id="edit-blog" style="margin-top: 10px;">编辑文章</button>
+            <button id="edit-blog" class="edit-btn"><i class="fa fa-edit"></i> 编辑文章</button>
         </div>
+
+        <!-- Commit信息区域 -->
+        <div class="commit-info-panel" id="commit-info-panel" style="display: none;">
+            <h3><i class="fa fa-code-branch"></i> 最新提交信息</h3>
+            <div class="commit-details">
+                <div class="commit-row">
+                    <span class="commit-label"><i class="fa fa-user"></i> 提交人:</span>
+                    <span class="commit-value" id="commit-author"></span>
+                </div>
+                <div class="commit-row">
+                    <span class="commit-label"><i class="fa fa-clock-o"></i> 提交时间:</span>
+                    <span class="commit-value" id="commit-date"></span>
+                </div>
+                <div class="commit-row">
+                    <span class="commit-label"><i class="fa fa-comment"></i> 提交信息:</span>
+                    <span class="commit-value" id="commit-message"></span>
+                </div>
+                <div class="commit-row">
+                    <span class="commit-label"><i class="fa fa-hashtag"></i> Commit SHA:</span>
+                    <a class="commit-value commit-sha" id="commit-sha" target="_blank"></a>
+                </div>
+            </div>
+        </div>
+
         <div class="content">
-            <div id="loading" class="loading">加载中...</div>
+            <div id="loading" class="loading"><i class="fa fa-spinner fa-spin"></i> 加载中...</div>
             <div id="error" class="error" style="display: none;"></div>
             <div id="blog-content" class="entry" style="display: none;"></div>
         </div>
@@ -54,6 +80,19 @@
             return params;
         }
 
+        // 显示提交信息
+        function displayCommitInfo(commitInfo, owner, repo, fullSha) {
+            if (!commitInfo) return;
+
+            document.getElementById('commit-author').textContent = commitInfo.author;
+            document.getElementById('commit-date').textContent = commitInfo.date.toLocaleString();
+            document.getElementById('commit-message').textContent = commitInfo.message;
+            document.getElementById('commit-sha').textContent = commitInfo.sha;
+            document.getElementById('commit-sha').href = `https://github.com/${owner}/${repo}/commit/${fullSha}`;
+
+            document.getElementById('commit-info-panel').style.display = 'block';
+        }
+
         // 返回博客列表
         document.getElementById('back-to-index').addEventListener('click', () => {
             window.location.href = '../index.html';
@@ -75,6 +114,12 @@
                 if (!group || !blog) {
                     throw new Error('缺少必要参数: group和blog');
                 }
+
+                // 解析仓库信息
+                const hostname = window.location.hostname;
+                const owner = hostname.split('.github.io')[0];
+                const repo = hostname;
+                const branch = 'main';
 
                 // 加载配置文件
                 const configResponse = await fetch('../blog-config.json');
@@ -104,6 +149,22 @@
                     tagElement.textContent = tag;
                     tagsContainer.appendChild(tagElement);
                 });
+
+                // 获取提交信息
+                const commitResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/commits?path=${blogInfo.path.split('/').map(s => encodeURIComponent(s)).join('/')}&ref=${branch}&per_page=1`);
+                if (commitResponse.ok) {
+                    const commits = await commitResponse.json();
+                    if (commits && commits.length > 0) {
+                        const commit = commits[0];
+                        const commitInfo = {
+                            author: commit.commit.committer.name || commit.author?.login || '未知',
+                            date: new Date(commit.commit.committer.date),
+                            message: commit.commit.message,
+                            sha: commit.sha.substring(0, 7)
+                        };
+                        displayCommitInfo(commitInfo, owner, repo, commit.sha);
+                    }
+                }
 
                 // 加载Markdown文件
                 const markdownResponse = await fetch(blogInfo.path);
