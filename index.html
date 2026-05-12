@@ -162,15 +162,15 @@
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-javascript.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
     <script>
-        MathJax = {
+        window.MathJax = {
             tex: {
                 inlineMath: [['$','$'], ["\\(","\\)"]],
                 processEscapes: true
             }
         };
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
 
     <!-- 引入GitHub API封装和主逻辑 -->
     <script type="module" src="./js/github-api.js"></script>

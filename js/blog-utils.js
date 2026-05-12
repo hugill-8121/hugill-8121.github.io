@@ -79,14 +79,46 @@ export function loadBlogContent(blog, dom, renderMarkdownFunc) {
                 Prism.highlightAll();
             }
 
-            // 渲染数学公式
-            if (window.MathJax && window.MathJax.typesetPromise) {
-                window.MathJax.typesetPromise([dom.showContent]);
-            }
+            // 渲染数学公式并等待完成后显示内容
+            const showContent = () => {
+                dom.showLoading.style.display = 'none';
+                dom.showContent.style.display = 'block';
+            };
 
-            // 显示内容
-            dom.showLoading.style.display = 'none';
-            dom.showContent.style.display = 'block';
+            if (window.MathJax) {
+                const renderMath = () => {
+                    if (window.MathJax.typesetPromise) {
+                        return window.MathJax.typesetPromise([dom.showContent])
+                            .then(() => {
+                                showContent();
+                            })
+                            .catch(err => {
+                                console.warn('MathJax渲染警告:', err);
+                                showContent(); // 即使渲染失败也显示内容
+                            });
+                    }
+                    showContent();
+                    return Promise.resolve();
+                };
+
+                if (window.MathJax.startup && window.MathJax.startup.promise) {
+                    window.MathJax.startup.promise
+                        .then(renderMath)
+                        .catch(err => {
+                            console.warn('MathJax初始化警告:', err);
+                            showContent();
+                        });
+                } else if (window.MathJax.typesetPromise) {
+                    // 如果 startup 不存在但 typesetPromise 存在，延迟后使用
+                    setTimeout(() => {
+                        renderMath();
+                    }, 100);
+                } else {
+                    showContent();
+                }
+            } else {
+                showContent();
+            }
         })
         .catch(err => {
             console.error('加载博客内容失败:', err);

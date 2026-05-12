@@ -54,15 +54,15 @@
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-javascript.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
     <script>
-        MathJax = {
+        window.MathJax = {
             tex: {
                 inlineMath: [['$','$'], ["\\(","\\)"]],
                 processEscapes: true
             }
         };
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
 
     <script type="module">
         import { renderMarkdown } from '../js/blog-utils.js';
@@ -183,14 +183,46 @@
                 // 代码高亮
                 Prism.highlightAll();
 
-                // 渲染数学公式
-                if (window.MathJax) {
-                    await MathJax.typesetPromise([contentContainer]);
-                }
+                // 显示内容的函数
+                const showContent = () => {
+                    document.getElementById('loading').style.display = 'none';
+                    contentContainer.style.display = 'block';
+                };
 
-                // 显示内容，隐藏加载状态
-                document.getElementById('loading').style.display = 'none';
-                contentContainer.style.display = 'block';
+                // 渲染数学公式并等待完成后显示内容
+                if (window.MathJax) {
+                    const renderMath = async () => {
+                        if (window.MathJax.typesetPromise) {
+                            try {
+                                await window.MathJax.typesetPromise([contentContainer]);
+                                showContent();
+                            } catch (e) {
+                                console.warn('MathJax渲染警告:', e);
+                                showContent(); // 即使渲染失败也显示内容
+                            }
+                        } else {
+                            showContent();
+                        }
+                    };
+
+                    if (window.MathJax.startup && window.MathJax.startup.promise) {
+                        await window.MathJax.startup.promise
+                            .then(renderMath)
+                            .catch(err => {
+                                console.warn('MathJax初始化警告:', err);
+                                showContent();
+                            });
+                    } else if (window.MathJax.typesetPromise) {
+                        // 延迟后渲染
+                        setTimeout(() => {
+                            renderMath();
+                        }, 100);
+                    } else {
+                        showContent();
+                    }
+                } else {
+                    showContent();
+                }
 
             } catch (error) {
                 console.error('加载失败:', error);
