@@ -73,17 +73,17 @@ export function loadBlogContent(blog, dom, renderMarkdownFunc) {
         .then(markdown => {
             const html = renderMarkdownFunc(markdown);
             dom.showContent.innerHTML = html;
-            
+
             // 代码高亮
             if (window.Prism) {
                 Prism.highlightAll();
             }
-            
+
             // 渲染数学公式
-            if (window.MathJax) {
-                MathJax.Hub.Queue(["Typeset", MathJax.Hub, dom.showContent]);
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                window.MathJax.typesetPromise([dom.showContent]);
             }
-            
+
             // 显示内容
             dom.showLoading.style.display = 'none';
             dom.showContent.style.display = 'block';

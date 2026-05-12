@@ -103,6 +103,30 @@
                 <div class="tags" id="show-tags"></div>
                 <button id="edit-current-blog" style="margin-top: 10px;">编辑文章</button>
             </div>
+
+            <!-- Commit信息区域 -->
+            <div class="commit-info-panel" id="commit-info-panel" style="display: none;">
+                <h3><i class="fa fa-code-branch"></i> 最新提交信息</h3>
+                <div class="commit-details">
+                    <div class="commit-row">
+                        <span class="commit-label"><i class="fa fa-user"></i> 提交人:</span>
+                        <span class="commit-value" id="commit-author"></span>
+                    </div>
+                    <div class="commit-row">
+                        <span class="commit-label"><i class="fa fa-clock-o"></i> 提交时间:</span>
+                        <span class="commit-value" id="commit-date"></span>
+                    </div>
+                    <div class="commit-row">
+                        <span class="commit-label"><i class="fa fa-comment"></i> 提交信息:</span>
+                        <span class="commit-value" id="commit-message"></span>
+                    </div>
+                    <div class="commit-row">
+                        <span class="commit-label"><i class="fa fa-hashtag"></i> Commit SHA:</span>
+                        <a class="commit-value commit-sha" id="commit-sha" target="_blank"></a>
+                    </div>
+                </div>
+            </div>
+
             <div class="content">
                 <div id="show-loading" class="loading">加载中...</div>
                 <div id="show-error" class="error" style="display: none;"></div>
@@ -138,14 +162,14 @@
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-javascript.min.js"></script>
-    <script src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    <script type="text/x-mathjax-config">
-        MathJax.Hub.Config({
-            tex2jax: {
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+    <script>
+        MathJax = {
+            tex: {
                 inlineMath: [['$','$'], ["\\(","\\)"]],
                 processEscapes: true
             }
-        });
+        };
     </script>
 
     <!-- 引入GitHub API封装和主逻辑 -->
@@ -212,18 +236,80 @@
             closeModalBtn: document.getElementById('close-modal')
         };
 
+        // 解析URL参数
+        function getUrlParams() {
+            const params = {};
+            const queryString = window.location.search.slice(1);
+            queryString.split('&').forEach(pair => {
+                const [key, value] = pair.split('=');
+                if (key && value) {
+                    params[key] = decodeURIComponent(value);
+                }
+            });
+            return params;
+        }
+
         // 初始化
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 loadBlogSettings();
                 checkLoginStatus();
                 await initBlog();
+
+                const params = getUrlParams();
+                if (params.opera === 'blog-show' && params.blog) {
+                    // 如果URL参数指定了博客，进入博客详情页
+                    await showBlogByTitle(params.blog);
+                }
+
                 bindEvents();
             } catch (error) {
                 console.error('初始化失败:', error);
                 dom.loadingEl.innerHTML = `<p style="color: red;">加载失败: ${error.message}</p>`;
             }
         });
+
+        // 根据标题显示博客
+        async function showBlogByTitle(blogTitle) {
+            const blogInfo = allBlogs.find(b => b.title === blogTitle);
+            if (!blogInfo) {
+                console.error('找不到博客:', blogTitle);
+                return;
+            }
+
+            currentBlog = blogInfo;
+            switchToShow(blogInfo, dom);
+            loadBlogContent(blogInfo, dom, renderMarkdown);
+
+            // 获取并显示提交信息
+            const commitResponse = await fetch(`https://api.github.com/repos/${config.owner}/${config.repo}/commits?path=${blogInfo.path.split('/').map(s => encodeURIComponent(s)).join('/')}&ref=${config.branch}&per_page=1`);
+            if (commitResponse.ok) {
+                const commits = await commitResponse.json();
+                if (commits && commits.length > 0) {
+                    const commit = commits[0];
+                    const commitInfo = {
+                        author: commit.commit.committer.name || commit.author?.login || '未知',
+                        date: new Date(commit.commit.committer.date),
+                        message: commit.commit.message,
+                        sha: commit.sha.substring(0, 7)
+                    };
+                    displayCommitInfo(commitInfo, config.owner, config.repo, commit.sha);
+                }
+            }
+        }
+
+        // 显示提交信息
+        function displayCommitInfo(commitInfo, owner, repo, fullSha) {
+            if (!commitInfo) return;
+
+            document.getElementById('commit-author').textContent = commitInfo.author;
+            document.getElementById('commit-date').textContent = commitInfo.date.toLocaleString();
+            document.getElementById('commit-message').textContent = commitInfo.message;
+            document.getElementById('commit-sha').textContent = commitInfo.sha;
+            document.getElementById('commit-sha').href = `https://github.com/${owner}/${repo}/commit/${fullSha}`;
+
+            document.getElementById('commit-info-panel').style.display = 'block';
+        }
 
         // 加载博客配置
         function loadBlogSettings() {
@@ -469,7 +555,7 @@
 
             // 点击卡片进入查看模式
             card.addEventListener('click', () => {
-                window.location.href = `blog-show.html?blog=${encodeURIComponent(article.title)}`;
+                window.location.href = `?opera=blog-show&blog=${encodeURIComponent(article.title)}`;
             });
 
             return card;
@@ -518,7 +604,9 @@
         // 绑定事件
         function bindEvents() {
             // 容器切换事件
-            dom.backToList.addEventListener('click', () => switchToList(dom));
+            dom.backToList.addEventListener('click', () => {
+                window.location.href = 'index.html';
+            });
             dom.backToShow.addEventListener('click', () => {
                 if (currentBlog) switchToShow(currentBlog, dom);
             });

@@ -185,7 +185,7 @@
 
                 // 渲染数学公式
                 if (window.MathJax) {
-                    MathJax.Hub.Queue(["Typeset", MathJax.Hub, contentContainer]);
+                    await MathJax.typesetPromise([contentContainer]);
                 }
 
                 // 显示内容，隐藏加载状态
