@@ -20,6 +20,10 @@ export function switchToShow(blog, dom) {
     dom.containers.show.classList.remove('container-hidden');
     dom.containers.edit.classList.add('container-hidden');
     dom.containers.edit.classList.remove('container-active');
+
+    // 隐藏左侧时间过滤器
+    const sidebarLeft = document.querySelector('.sidebar-left');
+    if (sidebarLeft) sidebarLeft.style.display = 'none';
 }
 
 export function switchToEdit(blog, dom) {

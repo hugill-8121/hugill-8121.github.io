@@ -3,21 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>云风青的技术博客</title>
+    <title>加载中...</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css">
 </head>
 <body>
-    <!-- 配置信息 -->
-    <script id="blog-settings" type="application/json">
-        {"title":"云风青的技术博客","introduction":"欢迎来到云风青的blog！这里分享技术心得和学习笔记"}
-    </script>
-
     <header>
-        <h1 id="blog-title">技术博客</h1>
-        <p class="header-desc" id="blog-intro">显示别名和修改时间的博客示例</p>
-        
+        <h1 id="blog-title">加载中...</h1>
+        <p class="header-desc" id="blog-intro">加载中...</p>
+
         <!-- 登录相关元素 -->
         <div class="login-container">
             <span class="username-display" id="username-display"></span>
@@ -40,7 +35,10 @@
                 <div class="menu-item disabled" id="api-status-item">
                     <i class="fa fa-bar-chart"></i> 查询API状态
                 </div>
-                
+                <div class="menu-item" id="add-blog-item">
+                    <i class="fa fa-plus"></i> 新增blog
+                </div>
+
                 <!-- 登录表单 -->
                 <div id="login-form" style="display: none; padding: 0 1rem 1rem;">
                     <input type="password" class="token-input" id="github-token" placeholder="输入GitHub Token (ghp_xxx...)">
@@ -54,27 +52,27 @@
     <div class="api-status-modal" id="api-status-modal">
         <div class="modal-content">
             <h3 class="modal-title">API 限流状态</h3>
-            <div class="info-item">
+            <div class="info-item-left">
                 <strong>用户名：</strong>
                 <span id="modal-user-login">-</span>
             </div>
-            <div class="info-item">
+            <div class="info-item-left">
                 <strong>Core API 剩余次数：</strong>
                 <span id="modal-core-remaining">-</span> / <span id="modal-core-limit">-</span>
             </div>
-            <div class="info-item">
+            <div class="info-item-left">
                 <strong>Core API 重置时间：</strong>
                 <span id="modal-core-reset">-</span>
             </div>
-            <div class="info-item">
+            <div class="info-item-left">
                 <strong>Search API 剩余次数：</strong>
                 <span id="modal-search-remaining">-</span> / <span id="modal-search-limit">-</span>
             </div>
-            <div class="info-item">
+            <div class="info-item-left">
                 <strong>Search API 重置时间：</strong>
                 <span id="modal-search-reset">-</span>
             </div>
-            <div class="info-item">
+            <div class="info-item-left">
                 <strong>GraphQL API 剩余次数：</strong>
                 <span id="modal-graphql-remaining">-</span> / <span id="modal-graphql-limit">-</span>
             </div>
@@ -82,8 +80,49 @@
         </div>
     </div>
 
+    <!-- 文件右键菜单 -->
+    <div class="context-menu" id="file-context-menu">
+        <div class="context-menu-item" id="ctx-copy-path">
+            <i class="fa fa-copy"></i> 复制路径
+        </div>
+        <div class="context-menu-item" id="ctx-open-file">
+            <i class="fa fa-external-link"></i> 打开文件
+        </div>
+        <div class="context-menu-item" id="ctx-new-folder" style="display: none;">
+            <i class="fa fa-folder-o"></i> 新增文件夹
+        </div>
+    </div>
+
+    <!-- 资源树右键菜单 -->
+    <div class="context-menu" id="resource-context-menu">
+        <div class="context-menu-item" id="res-upload-file">
+            <i class="fa fa-upload"></i> 上传资源文件
+        </div>
+        <div class="context-menu-item" id="res-new-folder">
+            <i class="fa fa-folder-o"></i> 新增文件夹
+        </div>
+    </div>
+
     <!-- 三个核心容器 -->
     <div id="container-wrapper">
+        <!-- 左侧时间过滤器 -->
+        <div class="sidebar-left" id="sidebar-left">
+            <div class="sidebar-section">
+                <h3><i class="fa fa-calendar"></i> 时间过滤</h3>
+                <div class="month-list" id="month-list">
+                    <!-- 月份列表将动态生成 -->
+                </div>
+                <div class="date-range">
+                    <label>日期范围：</label>
+                    <input type="month" id="date-start" class="date-input">
+                    <span>至</span>
+                    <input type="month" id="date-end" class="date-input">
+                    <button id="apply-date-filter" class="btn-filter">应用</button>
+                    <button id="reset-date-filter" class="btn-filter">重置</button>
+                </div>
+            </div>
+        </div>
+
         <!-- 1. 博客卡片容器（默认显示） -->
         <div id="blog-list-container" class="container-active">
             <div class="tag-cloud">
@@ -136,22 +175,65 @@
 
         <!-- 3. 博客编辑容器（默认隐藏） -->
         <div id="blog-edit-container" class="container-hidden">
-            <button id="back-to-show">← 返回查看</button>
-            <h2>编辑文章</h2>
-            <div class="form-group">
-                <label for="edit-title">文章标题</label>
-                <input type="text" id="edit-title">
+            <div class="edit-layout">
+                <!-- 左侧文件栏 -->
+                <div class="edit-sidebar-left">
+                    <div class="sidebar-header">
+                        <h3><i class="fa fa-file-text-o"></i> 文件</h3>
+                    </div>
+                    <div class="file-tree" id="file-tree">
+                        <!-- 文件树将动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 中间编辑区 -->
+                <div class="edit-main">
+                    <!-- 顶部标签页 -->
+                    <div class="edit-tabs" id="edit-tabs">
+                        <!-- 标签页将动态生成 -->
+                    </div>
+
+                    <!-- 编辑表单 -->
+                    <div class="edit-form">
+                        <h2 id="edit-form-title">编辑文章</h2>
+
+                        <!-- 分组选择（仅新增模式显示） -->
+                        <div class="form-group" id="edit-group-group" style="display: none;">
+                            <label for="edit-group">分组 *</label>
+                            <select id="edit-group" class="modal-input">
+                                <option value="">请选择分组</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="edit-title">文章标题 *</label>
+                            <input type="text" id="edit-title" class="modal-input" placeholder="请输入文章标题">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-tags">标签（用逗号分隔）</label>
+                            <input type="text" id="edit-tags" class="modal-input" placeholder="例如: 技术笔记,grpc">
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-content">文章内容（Markdown）</label>
+                            <textarea id="edit-content" class="modal-textarea" style="height: 400px;"></textarea>
+                        </div>
+                        <div class="edit-actions">
+                            <button id="save-edit" class="btn-confirm">保存</button>
+                        </div>
+                        <div id="edit-status" class="status"></div>
+                    </div>
+                </div>
+
+                <!-- 右侧资源栏 -->
+                <div class="edit-sidebar-right">
+                    <div class="sidebar-header">
+                        <h3><i class="fa fa-folder-o"></i> 资源</h3>
+                    </div>
+                    <div class="resource-tree" id="resource-tree">
+                        <!-- 资源树将动态生成 -->
+                    </div>
+                </div>
             </div>
-            <div class="form-group">
-                <label for="edit-tags">标签（用逗号分隔）</label>
-                <input type="text" id="edit-tags">
-            </div>
-            <div class="form-group">
-                <label for="edit-content">文章内容（Markdown）</label>
-                <textarea id="edit-content" style="height: 400px;"></textarea>
-            </div>
-            <button id="save-edit">保存修改</button>
-            <div id="edit-status" class="status"></div>
         </div>
     </div>
 
@@ -215,7 +297,6 @@
             editStatus: document.getElementById('edit-status'),
             // 按钮
             backToList: document.getElementById('back-to-list'),
-            backToShow: document.getElementById('back-to-show'),
             editCurrentBlog: document.getElementById('edit-current-blog'),
             saveEdit: document.getElementById('save-edit'),
             // 登录相关
@@ -233,8 +314,625 @@
             usernameDisplay: document.getElementById('username-display'),
             // API状态弹窗
             apiStatusModal: document.getElementById('api-status-modal'),
-            closeModalBtn: document.getElementById('close-modal')
+            closeModalBtn: document.getElementById('close-modal'),
+            // 新增blog相关
+            addBlogItem: document.getElementById('add-blog-item'),
+            addBlogModal: document.getElementById('add-blog-modal'),
+            // 时间过滤器相关
+            monthList: document.getElementById('month-list'),
+            dateStart: document.getElementById('date-start'),
+            dateEnd: document.getElementById('date-end'),
+            applyDateFilter: document.getElementById('apply-date-filter'),
+            resetDateFilter: document.getElementById('reset-date-filter'),
+            // 编辑界面相关
+            editTabs: document.getElementById('edit-tabs'),
+            fileTree: document.getElementById('file-tree'),
+            resourceTree: document.getElementById('resource-tree'),
+            fileContextMenu: document.getElementById('file-context-menu'),
+            ctxCopyPath: document.getElementById('ctx-copy-path'),
+            ctxOpenFile: document.getElementById('ctx-open-file'),
+            ctxNewFolder: document.getElementById('ctx-new-folder'),
+            resourceContextMenu: document.getElementById('resource-context-menu'),
+            resUploadFile: document.getElementById('res-upload-file'),
+            resNewFolder: document.getElementById('res-new-folder')
         };
+
+        // 编辑界面全局变量
+        let openTabs = [];
+        let activeTabId = null;
+        let currentEditFile = null;
+        let editedContents = new Map(); // 存储每个标签页的编辑状态
+        let selectedMonths = new Set();
+        let currentFilterTag = null;
+        let globalCommitMap = new Map(); // 全局commit信息缓存 {path: commitInfo}
+        let isEditMode = false; // 编辑模式标志，true=编辑，false=新增
+
+        // ==================== 编辑界面相关函数 ====================
+
+        // 打开新增模式
+        function openNewBlogMode() {
+            isEditMode = false;
+            document.getElementById('edit-form-title').textContent = '新增博客';
+            document.getElementById('edit-group-group').style.display = 'block';
+            document.getElementById('save-edit').textContent = '确认新增';
+
+            // 清空表单
+            document.getElementById('edit-group').value = '';
+            document.getElementById('edit-title').value = '';
+            document.getElementById('edit-tags').value = '';
+            document.getElementById('edit-content').value = '';
+            document.getElementById('edit-status').textContent = '';
+
+            // 加载分组列表
+            loadGroupsForEdit();
+
+            // 切换到编辑容器
+            dom.containers.list.classList.add('container-hidden');
+            dom.containers.list.classList.remove('container-active');
+            dom.containers.show.classList.add('container-hidden');
+            dom.containers.show.classList.remove('container-active');
+            dom.containers.edit.classList.add('container-active');
+            dom.containers.edit.classList.remove('container-hidden');
+
+            // 隐藏左侧时间过滤器
+            document.querySelector('.sidebar-left').style.display = 'none';
+
+            // 清空标签页
+            openTabs = [];
+            activeTabId = null;
+            renderTabs();
+        }
+
+        // 生成唯一标签ID
+        function generateTabId() {
+            return 'tab-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // 打开文件到标签页
+        function openFileInTab(blog, isNew = false) {
+            isEditMode = !isNew; // 设置编辑模式标志
+            document.getElementById('edit-form-title').textContent = isNew ? '新增博客' : '编辑文章';
+            document.getElementById('edit-group-group').style.display = isNew ? 'block' : 'none';
+            document.getElementById('save-edit').textContent = isNew ? '确认新增' : '保存修改';
+
+            if (!isNew) {
+                // 编辑模式：加载分组列表并设为只读
+                loadGroupsForEdit();
+                const groupSelect = document.getElementById('edit-group');
+                if (blog.group) {
+                    groupSelect.value = blog.group;
+                    groupSelect.disabled = true;
+                }
+            }
+
+            const tabId = blog.uuid || generateTabId();
+
+            // 检查是否已打开
+            const existingTab = openTabs.find(t => t.id === tabId);
+            if (existingTab) {
+                // 如果有未保存的编辑，先保存到Map
+                if (activeTabId && dom.editContent.value !== editedContents.get(activeTabId)) {
+                    editedContents.set(activeTabId, dom.editContent.value);
+                }
+                // 切换到已有标签
+                switchToTab(tabId);
+                return;
+            }
+
+            // 保存当前标签的编辑状态
+            if (activeTabId) {
+                editedContents.set(activeTabId, dom.editContent.value);
+            }
+
+            // 创建新标签
+            const newTab = {
+                id: tabId,
+                title: blog.title,
+                blog: blog,
+                isNew: isNew
+            };
+            openTabs.push(newTab);
+
+            // 加载文件内容
+            if (!isNew && blog.path) {
+                fetch(blog.path)
+                    .then(res => res.text())
+                    .then(content => {
+                        editedContents.set(tabId, content);
+                        if (activeTabId === tabId) {
+                            dom.editContent.value = content;
+                        }
+                    })
+                    .catch(err => {
+                        console.error('加载文件失败:', err);
+                    });
+            }
+
+            // 渲染标签并切换
+            renderTabs();
+            switchToTab(tabId);
+
+            // 切换到编辑容器
+            dom.containers.list.classList.add('container-hidden');
+            dom.containers.list.classList.remove('container-active');
+            dom.containers.show.classList.add('container-hidden');
+            dom.containers.show.classList.remove('container-active');
+            dom.containers.edit.classList.add('container-active');
+            dom.containers.edit.classList.remove('container-hidden');
+
+            // 隐藏左侧时间过滤器
+            document.querySelector('.sidebar-left').style.display = 'none';
+        }
+
+        // 切换到指定标签
+        function switchToTab(tabId) {
+            // 保存当前标签的编辑状态
+            if (activeTabId) {
+                editedContents.set(activeTabId, dom.editContent.value);
+            }
+
+            activeTabId = tabId;
+            const tab = openTabs.find(t => t.id === tabId);
+            if (!tab) return;
+
+            // 根据标签页状态设置编辑模式
+            isEditMode = !tab.isNew;
+            document.getElementById('edit-form-title').textContent = tab.isNew ? '新增博客' : '编辑文章';
+            document.getElementById('edit-group-group').style.display = tab.isNew ? 'block' : 'none';
+            document.getElementById('save-edit').textContent = tab.isNew ? '确认新增' : '保存修改';
+
+            // 更新表单
+            dom.editTitle.value = tab.blog.title;
+            dom.editTags.value = tab.blog.tags.join(',');
+            dom.editContent.value = editedContents.get(tabId) || '';
+            currentEditFile = tab.blog;
+
+            // 更新标签高亮
+            renderTabs();
+
+            // 初始化文件树和资源树
+            renderFileTree();
+            renderResourceTree();
+        }
+
+        // 关闭标签
+        function closeTab(tabId, event) {
+            if (event) event.stopPropagation();
+
+            // 检查是否有未保存的更改
+            const currentContent = editedContents.get(tabId) || '';
+            const tab = openTabs.find(t => t.id === tabId);
+
+            // 如果有编辑且与原始内容不同，提示保存
+            if (tab && !tab.isNew && tab.blog.path) {
+                const originalContent = editedContents.get(tabId) || '';
+                if (currentContent !== originalContent) {
+                    if (!confirm('当前文件有未保存的更改，确定要关闭吗？')) {
+                        return;
+                    }
+                }
+            }
+
+            // 删除标签
+            const index = openTabs.findIndex(t => t.id === tabId);
+            if (index > -1) {
+                openTabs.splice(index, 1);
+                editedContents.delete(tabId);
+            }
+
+            // 如果关闭的是当前标签，切换到另一个
+            if (activeTabId === tabId) {
+                if (openTabs.length > 0) {
+                    const newIndex = Math.min(index, openTabs.length - 1);
+                    switchToTab(openTabs[newIndex].id);
+                } else {
+                    activeTabId = null;
+                    currentEditFile = null;
+                    dom.containers.edit.classList.add('container-hidden');
+                    dom.containers.edit.classList.remove('container-active');
+                    dom.containers.list.classList.add('container-active');
+                    dom.containers.list.classList.remove('container-hidden');
+                }
+            }
+
+            renderTabs();
+        }
+
+        // 渲染标签页
+        function renderTabs() {
+            dom.editTabs.innerHTML = '';
+
+            openTabs.forEach(tab => {
+                const tabEl = document.createElement('div');
+                tabEl.className = 'edit-tab' + (tab.id === activeTabId ? ' active' : '');
+                tabEl.innerHTML = `
+                    <span class="edit-tab-title">${tab.title}</span>
+                    <span class="edit-tab-close" data-tab-id="${tab.id}">×</span>
+                `;
+
+                tabEl.addEventListener('click', () => switchToTab(tab.id));
+
+                tabEl.querySelector('.edit-tab-close').addEventListener('click', (e) => {
+                    closeTab(tab.id, e);
+                });
+
+                // 右键菜单
+                tabEl.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    // 这里可以添加标签页的右键菜单（固定、关闭等）
+                });
+
+                dom.editTabs.appendChild(tabEl);
+            });
+        }
+
+        // 渲染文件树
+        function renderFileTree() {
+            dom.fileTree.innerHTML = '';
+
+            // 按分组组织博客文件
+            const groupedBlogs = {};
+            allBlogs.forEach(blog => {
+                if (!groupedBlogs[blog.group]) {
+                    groupedBlogs[blog.group] = [];
+                }
+                groupedBlogs[blog.group].push(blog);
+            });
+
+            Object.keys(groupedBlogs).sort().forEach(group => {
+                // 文件夹
+                const folderEl = document.createElement('div');
+                folderEl.className = 'tree-item folder';
+                folderEl.dataset.group = group;
+                folderEl.innerHTML = '<i class="fa fa-folder-o"></i> <span class="folder-name">' + group + '</span>';
+                dom.fileTree.appendChild(folderEl);
+
+                // 双击展开/收起文件夹
+                folderEl.addEventListener('dblclick', (e) => {
+                    e.stopPropagation();
+                    const icon = folderEl.querySelector('i');
+                    const isExpanded = folderEl.classList.contains('expanded');
+                    if (isExpanded) {
+                        folderEl.classList.remove('expanded');
+                        icon.className = 'fa fa-folder-o';
+                        // 收起该文件夹下的所有文件
+                        let nextSibling = folderEl.nextElementSibling;
+                        while (nextSibling && nextSibling.classList.contains('tree-item')) {
+                            if (nextSibling.dataset.group === group) {
+                                nextSibling.style.display = 'none';
+                            } else {
+                                break;
+                            }
+                            nextSibling = nextSibling.nextElementSibling;
+                        }
+                    } else {
+                        folderEl.classList.add('expanded');
+                        icon.className = 'fa fa-folder-open-o';
+                        // 展开该文件夹下的所有文件
+                        let nextSibling = folderEl.nextElementSibling;
+                        while (nextSibling && nextSibling.classList.contains('tree-item')) {
+                            if (nextSibling.dataset.group === group) {
+                                nextSibling.style.display = 'flex';
+                            } else {
+                                break;
+                            }
+                            nextSibling = nextSibling.nextElementSibling;
+                        }
+                    }
+                });
+
+                // 右键菜单
+                folderEl.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showFileFolderContextMenu(e, group);
+                });
+
+                // 文件
+                groupedBlogs[group].forEach(blog => {
+                    const fileEl = document.createElement('div');
+                    fileEl.className = 'tree-item file';
+                    fileEl.dataset.group = group;
+                    fileEl.style.display = 'none'; // 默认收起
+                    if (currentEditFile && currentEditFile.title === blog.title) {
+                        fileEl.classList.add('active');
+                    }
+                    fileEl.innerHTML = `<i class="fa fa-file-text-o"></i> ${blog.title}`;
+                    fileEl.dataset.path = blog.path;
+                    fileEl.dataset.title = blog.title;
+
+                    // 双击打开文件
+                    fileEl.addEventListener('dblclick', () => {
+                        openFileInTab(blog);
+                    });
+
+                    // 右键菜单
+                    fileEl.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        showFileContextMenu(e, blog);
+                    });
+
+                    dom.fileTree.appendChild(fileEl);
+                });
+            });
+        }
+
+        // 显示文件文件夹右键菜单
+        function showFileFolderContextMenu(e, groupName) {
+            dom.fileContextMenu.style.display = 'block';
+            dom.fileContextMenu.style.left = e.pageX + 'px';
+            dom.fileContextMenu.style.top = e.pageY + 'px';
+
+            // 复制路径
+            dom.ctxCopyPath.onclick = () => {
+                navigator.clipboard.writeText(`blog/${groupName}/`);
+                dom.fileContextMenu.style.display = 'none';
+            };
+
+            // 打开文件（文件夹不显示此选项）
+            dom.ctxOpenFile.style.display = 'none';
+
+            // 新增文件夹选项
+            dom.ctxNewFolder.style.display = 'flex';
+            dom.ctxNewFolder.onclick = () => {
+                const folderName = prompt('请输入文件夹名称：');
+                if (folderName && folderName.trim()) {
+                    createBlogFolder(folderName.trim(), groupName);
+                }
+                dom.fileContextMenu.style.display = 'none';
+            };
+        }
+
+        // 创建博客文件夹
+        async function createBlogFolder(folderName, parentGroup) {
+            const token = localStorage.getItem('github-token');
+            if (!token) {
+                alert('请先登录');
+                return;
+            }
+
+            try {
+                const octokit = new Octokit({ auth: token });
+                const folderPath = `blog/${parentGroup}/${folderName}/.gitkeep`;
+
+                await octokit.rest.repos.createOrUpdateFileContents({
+                    owner: config.owner,
+                    repo: config.repo,
+                    path: folderPath,
+                    message: `创建文件夹: ${folderName}`,
+                    content: '',
+                    branch: config.branch
+                });
+
+                alert('文件夹创建成功！');
+                // 刷新文件树（如果需要的话）
+            } catch (error) {
+                console.error('创建文件夹失败:', error);
+                alert(`创建文件夹失败: ${error.message}`);
+            }
+        }
+
+        // 修改showFileContextMenu函数，确保打开文件选项显示
+        const originalShowFileContextMenu = showFileContextMenu;
+        showFileContextMenu = function(e, blog) {
+            dom.fileContextMenu.style.display = 'block';
+            dom.fileContextMenu.style.left = e.pageX + 'px';
+            dom.fileContextMenu.style.top = e.pageY + 'px';
+
+            // 复制路径
+            dom.ctxCopyPath.onclick = () => {
+                navigator.clipboard.writeText(blog.path);
+                dom.fileContextMenu.style.display = 'none';
+            };
+
+            // 打开文件
+            dom.ctxOpenFile.style.display = 'flex';
+            dom.ctxOpenFile.onclick = () => {
+                openFileInTab(blog);
+                dom.fileContextMenu.style.display = 'none';
+            };
+        };
+
+        // 渲染资源树
+        function renderResourceTree() {
+            dom.resourceTree.innerHTML = '';
+
+            // 显示资源文件夹（假设在 /asserts 目录）
+            const resourceFolder = document.createElement('div');
+            resourceFolder.className = 'tree-item folder';
+            resourceFolder.dataset.path = 'asserts';
+            resourceFolder.dataset.name = 'asserts';
+            resourceFolder.innerHTML = '<i class="fa fa-folder-o"></i> <span class="folder-name">asserts</span>';
+
+            // 双击展开/收起文件夹
+            resourceFolder.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                const icon = resourceFolder.querySelector('i');
+                const isExpanded = resourceFolder.classList.contains('expanded');
+                if (isExpanded) {
+                    resourceFolder.classList.remove('expanded');
+                    icon.className = 'fa fa-folder-o';
+                    // 收起子项
+                    let nextSibling = resourceFolder.nextElementSibling;
+                    while (nextSibling && nextSibling.classList.contains('tree-item')) {
+                        nextSibling.style.display = 'none';
+                        nextSibling = nextSibling.nextElementSibling;
+                    }
+                } else {
+                    resourceFolder.classList.add('expanded');
+                    icon.className = 'fa fa-folder-open-o';
+                    // 展开子项
+                    let nextSibling = resourceFolder.nextElementSibling;
+                    while (nextSibling && nextSibling.classList.contains('tree-item')) {
+                        nextSibling.style.display = 'flex';
+                        nextSibling = nextSibling.nextElementSibling;
+                    }
+                }
+            });
+
+            // 右键菜单
+            resourceFolder.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                showResourceContextMenu(e, 'asserts');
+            });
+
+            dom.resourceTree.appendChild(resourceFolder);
+
+            // 这里可以通过API获取asserts目录下的文件列表
+            // 暂时显示一些示例资源
+            const sampleResources = [
+                { name: '黑白混.png', path: '/asserts/黑白混.png' }
+            ];
+
+            sampleResources.forEach(resource => {
+                const resourceEl = document.createElement('div');
+                resourceEl.className = 'tree-item file';
+                resourceEl.style.display = 'none'; // 默认收起
+                resourceEl.innerHTML = `<i class="fa fa-image"></i> ${resource.name}`;
+                resourceEl.style.cursor = 'pointer';
+
+                // 双击打开资源
+                resourceEl.addEventListener('dblclick', () => {
+                    window.open(resource.path, '_blank');
+                });
+
+                dom.resourceTree.appendChild(resourceEl);
+            });
+        }
+
+        // 显示资源树右键菜单
+        function showResourceContextMenu(e, folderPath) {
+            dom.resourceContextMenu.style.display = 'block';
+            dom.resourceContextMenu.style.left = e.pageX + 'px';
+            dom.resourceContextMenu.style.top = e.pageY + 'px';
+            dom.resourceContextMenu.dataset.folderPath = folderPath;
+
+            // 上传资源文件
+            dom.resUploadFile.onclick = () => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '*/*';
+                input.onchange = async (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        await uploadResourceFile(file, folderPath);
+                    }
+                };
+                input.click();
+                dom.resourceContextMenu.style.display = 'none';
+            };
+
+            // 新增文件夹
+            dom.resNewFolder.onclick = () => {
+                const folderName = prompt('请输入文件夹名称：');
+                if (folderName && folderName.trim()) {
+                    createResourceFolder(folderName.trim(), folderPath);
+                }
+                dom.resourceContextMenu.style.display = 'none';
+            };
+        }
+
+        // 上传资源文件
+        async function uploadResourceFile(file, folderPath) {
+            const token = localStorage.getItem('github-token');
+            if (!token) {
+                alert('请先登录');
+                return;
+            }
+
+            try {
+                const octokit = new Octokit({ auth: token });
+                const filePath = `${folderPath}/${file.name}`;
+                const content = await readFileAsBase64(file);
+
+                await octokit.rest.repos.createOrUpdateFileContents({
+                    owner: config.owner,
+                    repo: config.repo,
+                    path: filePath,
+                    message: `上传资源文件: ${file.name}`,
+                    content: content,
+                    branch: config.branch
+                });
+
+                alert('上传成功！');
+                renderResourceTree();
+            } catch (error) {
+                console.error('上传失败:', error);
+                alert(`上传失败: ${error.message}`);
+            }
+        }
+
+        // 创建资源文件夹（创建.gitkeep文件）
+        async function createResourceFolder(folderName, parentPath) {
+            const token = localStorage.getItem('github-token');
+            if (!token) {
+                alert('请先登录');
+                return;
+            }
+
+            try {
+                const octokit = new Octokit({ auth: token });
+                const folderPath = parentPath ? `${parentPath}/${folderName}/.gitkeep` : `${folderName}/.gitkeep`;
+
+                await octokit.rest.repos.createOrUpdateFileContents({
+                    owner: config.owner,
+                    repo: config.repo,
+                    path: folderPath,
+                    message: `创建文件夹: ${folderName}`,
+                    content: '',
+                    branch: config.branch
+                });
+
+                alert('文件夹创建成功！');
+                renderResourceTree();
+            } catch (error) {
+                console.error('创建文件夹失败:', error);
+                alert(`创建文件夹失败: ${error.message}`);
+            }
+        }
+
+        // 读取文件为Base64
+        function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    // 移除data:xxx;base64,前缀
+                    const base64 = reader.result.split(',')[1];
+                    resolve(base64);
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // 显示文件右键菜单
+        function showFileContextMenu(e, blog) {
+            dom.fileContextMenu.style.display = 'block';
+            dom.fileContextMenu.style.left = e.pageX + 'px';
+            dom.fileContextMenu.style.top = e.pageY + 'px';
+
+            // 复制路径
+            dom.ctxCopyPath.onclick = () => {
+                navigator.clipboard.writeText(blog.path);
+                dom.fileContextMenu.style.display = 'none';
+            };
+
+            // 打开文件
+            dom.ctxOpenFile.onclick = () => {
+                openFileInTab(blog);
+                dom.fileContextMenu.style.display = 'none';
+            };
+        }
+
+        // 隐藏右键菜单
+        document.addEventListener('click', () => {
+            if (dom.fileContextMenu) {
+                dom.fileContextMenu.style.display = 'none';
+            }
+        });
+
+        // ==================== 结束编辑界面相关函数 ====================
 
         // 解析URL参数
         function getUrlParams() {
@@ -252,7 +950,7 @@
         // 初始化
         document.addEventListener('DOMContentLoaded', async () => {
             try {
-                loadBlogSettings();
+                await loadBlogSettings();
                 checkLoginStatus();
                 await initBlog();
 
@@ -312,14 +1010,32 @@
         }
 
         // 加载博客配置
-        function loadBlogSettings() {
+        async function loadBlogSettings() {
             try {
-                const settingsEl = document.getElementById('blog-settings');
-                const settings = JSON.parse(settingsEl.textContent);
-                document.getElementById('blog-title').textContent = settings.title || '技术博客';
-                document.getElementById('blog-intro').textContent = settings.introduction || '技术分享博客';
+                const response = await fetch('blog-config.json');
+                if (!response.ok) throw new Error('配置文件加载失败');
+                const config = await response.json();
+
+                // 设置浏览器标签名
+                if (config.browser_tag) {
+                    document.title = config.browser_tag;
+                }
+
+                // 设置页首大标题
+                if (config.web_title) {
+                    document.getElementById('blog-title').textContent = config.web_title;
+                }
+
+                // 设置介绍
+                if (config.web_introduction) {
+                    document.getElementById('blog-intro').textContent = config.web_introduction;
+                }
             } catch (err) {
                 console.warn('加载博客配置失败，使用默认值:', err);
+                // 使用默认值
+                document.title = '技术博客';
+                document.getElementById('blog-title').textContent = '技术博客';
+                document.getElementById('blog-intro').textContent = '技术分享博客';
             }
         }
 
@@ -339,30 +1055,56 @@
         }
 
         // 处理博客数据
-        async function processBlogData(blogs) {
-            dom.blogContainer.innerHTML = `
-                <div class="loading">
-                    正在加载博客列表...<br>
-                    <small id="process-progress">准备中</small>
-                </div>
-            `;
-            const progressEl = document.getElementById('process-progress');
-
+        async function processBlogData(config) {
             allBlogs = [];
             allTags.clear();
-            
+            globalCommitMap.clear();
+
+            // 适配配置文件格式，博客数据在 blogs 字段下
+            const blogs = config.blogs || config;
+
             Object.keys(blogs).forEach(group => {
-                blogs[group].forEach(blog => {
-                    blog.group = group;
-                    blog.filePath = blog.path; // 兼容现有配置
-                    allBlogs.push(blog);
-                    blog.tags.forEach(tag => allTags.add(tag));
-                });
+                const groupBlogs = blogs[group];
+                // 确保分组数据是数组
+                if (Array.isArray(groupBlogs)) {
+                    groupBlogs.forEach(blog => {
+                        blog.group = group;
+                        blog.uuid = blog.blog_uuid || blog.uuid; // 兼容不同字段名
+                        blog.filePath = blog.path; // 兼容现有配置
+                        allBlogs.push(blog);
+                        if (Array.isArray(blog.tags)) {
+                            blog.tags.forEach(tag => allTags.add(tag));
+                        }
+                    });
+                } else {
+                    console.warn(`分组 "${group}" 的数据不是数组:`, groupBlogs);
+                }
             });
-            
+
+            // 先显示博客列表（不包含commit信息）
+            renderTags();
+            renderMonthList();
+            renderBlogs();
+
+            // 异步加载commit信息
+            loadCommitsAsync();
+        }
+
+        // 异步加载commit信息
+        async function loadCommitsAsync() {
             const filePaths = allBlogs.map(blog => blog.path);
             const totalFiles = filePaths.length;
-            
+
+            // 显示加载状态
+            const loadingIndicator = document.createElement('div');
+            loadingIndicator.id = 'commit-loading';
+            loadingIndicator.className = 'loading';
+            loadingIndicator.innerHTML = `<small><i class="fa fa-spinner fa-spin"></i> 正在加载提交信息... (0/${totalFiles})</small>`;
+            loadingIndicator.style.padding = '10px';
+            loadingIndicator.style.color = '#6b7280';
+            loadingIndicator.style.fontSize = '0.9rem';
+            dom.blogContainer.insertBefore(loadingIndicator, dom.blogContainer.firstChild);
+
             const batchResults = await batchGetFileCommits(
                 config.owner,
                 config.repo,
@@ -371,54 +1113,79 @@
                 dom.githubTokenInput?.value.trim() || null,
                 100,
                 (processed) => {
-                    progressEl.textContent = `已处理 ${processed}/${totalFiles} 个文件`;
+                    const indicator = document.getElementById('commit-loading');
+                    if (indicator) {
+                        indicator.innerHTML = `<small><i class="fa fa-spinner fa-spin"></i> 正在加载提交信息... (${processed}/${totalFiles})</small>`;
+                    }
                 }
             );
 
-            const commitMap = new Map();
+            console.log('batchResults:', batchResults);
+
+            // 处理commit结果
             batchResults.forEach(item => {
                 if (!item.error && item.commits.length > 0) {
                     const commit = item.commits[0];
-                    commitMap.set(item.path, commit);
+                    // 存储到全局commit缓存
+                    globalCommitMap.set(item.path, {
+                        sha: commit.sha,
+                        date: new Date(commit.commit.committer.date),
+                        author: commit.commit.committer.name || commit.author?.login || '未知',
+                        message: commit.commit.message.split('\n')[0]
+                    });
+
                     const blog = allBlogs.find(b => b.path === item.path);
                     if (blog) {
-                        blog.lastModified = new Date(commit.commit.committer.date);
-                        // 保存提交人和提交信息
-                        blog.committer = commit.commit.committer.name || commit.author?.login || '未知';
-                        blog.commitMessage = commit.commit.message.split('\n')[0]; // 只取第一行
+                        blog.lastModified = globalCommitMap.get(item.path).date;
+                        blog.committer = globalCommitMap.get(item.path).author;
+                        blog.commitMessage = globalCommitMap.get(item.path).message;
                     }
+                } else {
+                    console.warn('获取commit失败:', item.path, item.error);
                 }
             });
 
+            // 移除加载指示器，重新渲染
+            const indicator = document.getElementById('commit-loading');
+            if (indicator) {
+                indicator.remove();
+            }
             renderTags();
+            renderMonthList();
             renderBlogs();
         }
 
         // 渲染标签云
         function renderTags() {
             if (!dom.tagsContainer) return;
-            
+
             dom.tagsContainer.innerHTML = '';
-            
+
             const allTagEl = document.createElement('span');
             allTagEl.className = 'tag active';
             allTagEl.textContent = '全部';
             allTagEl.addEventListener('click', () => {
                 document.querySelectorAll('.tag').forEach(tag => tag.classList.remove('active'));
                 allTagEl.classList.add('active');
+                currentFilterTag = null;
                 renderBlogs();
             });
             dom.tagsContainer.appendChild(allTagEl);
-            
+
             Array.from(allTags).forEach(tag => {
                 const tagEl = document.createElement('span');
                 tagEl.className = 'tag';
                 tagEl.textContent = tag;
-                
+                if (currentFilterTag === tag) {
+                    tagEl.classList.add('active');
+                    document.querySelectorAll('.tag')[0].classList.remove('active');
+                }
+
                 tagEl.addEventListener('click', () => {
                     document.querySelectorAll('.tag').forEach(t => t.classList.remove('active'));
                     tagEl.classList.add('active');
-                    renderBlogs(tag);
+                    currentFilterTag = tag;
+                    renderBlogs();
                 });
                 
                 dom.tagsContainer.appendChild(tagEl);
@@ -426,22 +1193,49 @@
         }
 
         // 渲染博客卡片
-        function renderBlogs(filterTag = null) {
+        function renderBlogs() {
             if (!dom.blogContainer) return;
-            
+
             dom.blogContainer.innerHTML = '';
-            
-            const filteredBlogs = filterTag 
-                ? allBlogs.filter(blog => blog.tags.includes(filterTag))
+
+            // 应用标签过滤
+            let filteredBlogs = currentFilterTag
+                ? allBlogs.filter(blog => blog.tags.includes(currentFilterTag))
                 : allBlogs;
-            
+
+            // 应用月份过滤
+            if (selectedMonths.size > 0) {
+                filteredBlogs = filteredBlogs.filter(blog => {
+                    if (!blog.lastModified) return false;
+                    const monthKey = getMonthKey(blog.lastModified);
+                    return selectedMonths.has(monthKey);
+                });
+            }
+
+            // 应用日期范围过滤
+            if (dom.dateStart.value || dom.dateEnd.value) {
+                filteredBlogs = filteredBlogs.filter(blog => {
+                    if (!blog.lastModified) return false;
+                    const blogDate = new Date(blog.lastModified);
+                    const blogMonth = getMonthKey(blogDate);
+
+                    if (dom.dateStart.value && blogMonth < dom.dateStart.value) {
+                        return false;
+                    }
+                    if (dom.dateEnd.value && blogMonth > dom.dateEnd.value) {
+                        return false;
+                    }
+                    return true;
+                });
+            }
+
             if (filteredBlogs.length === 0) {
                 dom.noResultsEl.style.display = 'block';
                 return;
             } else {
                 dom.noResultsEl.style.display = 'none';
             }
-            
+
             const blogsByCategory = {};
             filteredBlogs.forEach(blog => {
                 if (!blogsByCategory[blog.group]) {
@@ -449,26 +1243,113 @@
                 }
                 blogsByCategory[blog.group].push(blog);
             });
-            
+
             Object.keys(blogsByCategory).forEach(categoryName => {
                 const categorySection = document.createElement('section');
                 categorySection.className = 'category-section';
-                
+
                 const categoryHeader = document.createElement('h2');
                 categoryHeader.className = 'category-title';
                 categoryHeader.textContent = categoryName;
                 categorySection.appendChild(categoryHeader);
-                
+
                 const cardsContainer = document.createElement('div');
                 cardsContainer.className = 'cards-container';
-                
+
                 blogsByCategory[categoryName].forEach(article => {
                     cardsContainer.appendChild(createBlogCard(article));
                 });
-                
+
                 categorySection.appendChild(cardsContainer);
                 dom.blogContainer.appendChild(categorySection);
             });
+        }
+
+        // 获取月份键 (格式: YYYY-MM)
+        function getMonthKey(date) {
+            const d = new Date(date);
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        // 渲染月份列表
+        function renderMonthList() {
+            if (!dom.monthList) return;
+
+            console.log('渲染月份列表，allBlogs数量:', allBlogs.length);
+            console.log('allBlogs:', allBlogs);
+
+            // 统计每个月的博客数量
+            const monthStats = new Map();
+            allBlogs.forEach(blog => {
+                if (blog.lastModified) {
+                    const monthKey = getMonthKey(blog.lastModified);
+                    monthStats.set(monthKey, (monthStats.get(monthKey) || 0) + 1);
+                } else {
+                    console.warn('博客没有lastModified:', blog.title, blog.path);
+                }
+            });
+
+            console.log('月份统计:', monthStats);
+
+            // 按月份降序排序
+            const sortedMonths = Array.from(monthStats.keys()).sort((a, b) => b.localeCompare(a));
+
+            dom.monthList.innerHTML = '';
+
+            if (sortedMonths.length === 0) {
+                dom.monthList.innerHTML = '<div style="color: #9ca3af; font-size: 0.9rem; padding: 0.5rem;">暂无数据（请检查GitHub API是否正常）</div>';
+                return;
+            }
+
+            sortedMonths.forEach(month => {
+                const monthItem = document.createElement('div');
+                monthItem.className = 'month-item';
+                if (selectedMonths.has(month)) {
+                    monthItem.classList.add('active');
+                }
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'month-checkbox';
+                checkbox.checked = selectedMonths.has(month);
+                checkbox.addEventListener('change', (e) => {
+                    if (e.target.checked) {
+                        selectedMonths.add(month);
+                    } else {
+                        selectedMonths.delete(month);
+                    }
+                    renderMonthList();
+                    renderBlogs();
+                });
+
+                const label = document.createElement('span');
+                label.className = 'month-label';
+                label.textContent = formatMonth(month);
+
+                const count = document.createElement('span');
+                count.className = 'month-count';
+                count.textContent = monthStats.get(month);
+
+                monthItem.appendChild(checkbox);
+                monthItem.appendChild(label);
+                monthItem.appendChild(count);
+
+                // 点击整行切换选择
+                monthItem.addEventListener('click', (e) => {
+                    if (e.target !== checkbox) {
+                        checkbox.checked = !checkbox.checked;
+                        checkbox.dispatchEvent(new Event('change'));
+                    }
+                });
+
+                dom.monthList.appendChild(monthItem);
+            });
+        }
+
+        // 格式化月份显示
+        function formatMonth(month) {
+            const [year, monthNum] = month.split('-');
+            return `${year}年${parseInt(monthNum)}月`;
         }
 
         // 截断文本工具函数
@@ -605,13 +1486,18 @@
         function bindEvents() {
             // 容器切换事件
             dom.backToList.addEventListener('click', () => {
-                window.location.href = 'index.html';
-            });
-            dom.backToShow.addEventListener('click', () => {
-                if (currentBlog) switchToShow(currentBlog, dom);
+                // 切换到列表容器，显示左侧时间过滤器
+                dom.containers.list.classList.add('container-active');
+                dom.containers.list.classList.remove('container-hidden');
+                dom.containers.show.classList.add('container-hidden');
+                dom.containers.show.classList.remove('container-active');
+                dom.containers.edit.classList.add('container-hidden');
+                dom.containers.edit.classList.remove('container-active');
+                // 显示左侧时间过滤器
+                document.querySelector('.sidebar-left').style.display = 'block';
             });
             dom.editCurrentBlog.addEventListener('click', () => {
-                if (currentBlog) switchToEdit(currentBlog, dom);
+                if (currentBlog) openFileInTab(currentBlog);
             });
 
             // 保存编辑事件
@@ -622,42 +1508,134 @@
                     return;
                 }
 
-                if (!currentBlog) return;
+                const group = document.getElementById('edit-group').value.trim();
+                const title = dom.editTitle.value.trim();
+                const tags = dom.editTags.value.split(',').map(t => t.trim()).filter(t => t);
+                const content = dom.editContent.value;
+
+                if (!title) {
+                    showEditStatus('标题不能为空', true);
+                    return;
+                }
+
+                if (!isEditMode && !group) {
+                    showEditStatus('请选择分组', true);
+                    return;
+                }
 
                 try {
                     showEditStatus('保存中...');
-                    
-                    const octokit = new Octokit({ auth: token });
-                    const content = dom.editContent.value;
-                    const encodedContent = btoa(unescape(encodeURIComponent(content)));
-                    
-                    // 获取当前文件SHA
-                    const { data: fileData } = await octokit.rest.repos.getContent({
-                        owner: config.owner,
-                        repo: config.repo,
-                        path: currentBlog.path,
-                        ref: config.branch
-                    });
 
-                    // 更新文件
-                    await octokit.rest.repos.createOrUpdateFileContents({
-                        owner: config.owner,
-                        repo: config.repo,
-                        path: currentBlog.path,
-                        message: `更新 ${currentBlog.title}`,
-                        content: encodedContent,
-                        sha: fileData.sha,
-                        branch: config.branch
-                    });
+                    const octokit = new Octokit({ auth: token });
+                    const encodedContent = btoa(unescape(encodeURIComponent(content)));
+
+                    let filePath;
+
+                    if (!isEditMode) {
+                        // 新增模式
+                        filePath = `blog/${group}/${title}.md`;
+
+                        await octokit.rest.repos.createOrUpdateFileContents({
+                            owner: config.owner,
+                            repo: config.repo,
+                            path: filePath,
+                            message: `新增博客: ${title}`,
+                            content: encodedContent,
+                            branch: config.branch
+                        });
+
+                        // 更新blog-config.json
+                        const configResponse = await octokit.rest.repos.getContent({
+                            owner: config.owner,
+                            repo: config.repo,
+                            path: 'blog-config.json',
+                            ref: config.branch
+                        });
+
+                        const configContent = atob(configResponse.data.content);
+                        let blogConfig = JSON.parse(configContent);
+
+                        // 确保有 blogs 字段
+                        if (!blogConfig.blogs) {
+                            blogConfig.blogs = {};
+                        }
+                        if (!blogConfig.blogs[group]) {
+                            blogConfig.blogs[group] = [];
+                        }
+                        blogConfig.blogs[group].push({
+                            blog_uuid: generateUUID(),
+                            title: title,
+                            description: title,
+                            tags: tags.length > 0 ? tags : ['未分类'],
+                            path: filePath
+                        });
+
+                        const encodedConfig = btoa(unescape(encodeURIComponent(JSON.stringify(blogConfig, null, 2))));
+                        await octokit.rest.repos.createOrUpdateFileContents({
+                            owner: config.owner,
+                            repo: config.repo,
+                            path: 'blog-config.json',
+                            message: `更新blog配置: 新增 ${title}`,
+                            content: encodedConfig,
+                            sha: configResponse.data.sha,
+                            branch: config.branch
+                        });
+
+                    } else {
+                        // 编辑模式
+                        filePath = currentEditFile.path;
+
+                        // 获取当前文件SHA
+                        const { data: fileData } = await octokit.rest.repos.getContent({
+                            owner: config.owner,
+                            repo: config.repo,
+                            path: filePath,
+                            ref: config.branch
+                        });
+
+                        await octokit.rest.repos.createOrUpdateFileContents({
+                            owner: config.owner,
+                            repo: config.repo,
+                            path: filePath,
+                            message: `更新 ${title}`,
+                            content: encodedContent,
+                            sha: fileData.sha,
+                            branch: config.branch
+                        });
+                    }
+
+                    // 更新editedContents
+                    if (activeTabId) {
+                        editedContents.set(activeTabId, content);
+                    }
 
                     // 更新当前博客信息
-                    currentBlog.title = dom.editTitle.value;
-                    currentBlog.tags = dom.editTags.value.split(',').map(t => t.trim());
-                    
+                    if (currentEditFile) {
+                        currentEditFile.title = title;
+                        currentEditFile.tags = tags;
+                        currentEditFile.path = filePath;
+                        currentEditFile.group = group || currentEditFile.group;
+                    }
+
+                    // 更新标签页标题
+                    const tab = openTabs.find(t => t.id === activeTabId);
+                    if (tab) {
+                        tab.title = title;
+                        tab.blog = currentEditFile;
+                        renderTabs();
+                    }
+
                     showEditStatus('保存成功！');
-                    setTimeout(() => {
-                        switchToShow(currentBlog, dom);
-                        loadBlogContent(currentBlog, dom, renderMarkdown);
+
+                    // 刷新博客列表
+                    setTimeout(async () => {
+                        await initBlog();
+                        // 如果是新增的文件，可能需要切换到查看模式
+                        if (!isEditMode) {
+                            currentBlog = currentEditFile;
+                            switchToShow(currentBlog, dom);
+                            loadBlogContent(currentBlog, dom, renderMarkdown);
+                        }
                     }, 1000);
 
                 } catch (error) {
@@ -735,10 +1713,189 @@
                 }
             });
 
+            // 新增blog事件
+            dom.addBlogItem.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const token = localStorage.getItem('github-token');
+                if (!token) {
+                    alert('请先登录后再新增blog');
+                    return;
+                }
+                // 打开新增模式
+                openNewBlogMode();
+                dom.loginMenu.classList.remove('show');
+            });
+
+            dom.confirmAddBlog.addEventListener('click', () => {
+                addNewBlog();
+            });
+
+            // 时间过滤器事件
+            dom.applyDateFilter.addEventListener('click', () => {
+                renderBlogs();
+            });
+
+            dom.resetDateFilter.addEventListener('click', () => {
+                dom.dateStart.value = '';
+                dom.dateEnd.value = '';
+                selectedMonths.clear();
+                renderMonthList();
+                renderBlogs();
+            });
+
             // 关闭模态框
             dom.closeModalBtn.addEventListener('click', () => {
                 dom.apiStatusModal.style.display = 'none';
             });
+
+            // 点击弹窗背景关闭
+            dom.apiStatusModal.addEventListener('click', (e) => {
+                if (e.target === dom.apiStatusModal) {
+                    dom.apiStatusModal.style.display = 'none';
+                }
+            });
+
+            // ESC键关闭弹窗
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && dom.apiStatusModal.style.display === 'flex') {
+                    dom.apiStatusModal.style.display = 'none';
+                }
+            });
+        }
+
+        // 加载编辑界面的分组列表
+        async function loadGroupsForEdit() {
+            try {
+                const response = await fetch('blog-config.json');
+                if (response.ok) {
+                    const config = await response.json();
+                    const groupSelect = document.getElementById('edit-group');
+                    groupSelect.innerHTML = '<option value="">请选择分组</option>';
+                    // 适配配置文件格式，博客数据在 blogs 字段下
+                    const blogs = config.blogs || config;
+                    Object.keys(blogs).forEach(group => {
+                        const option = document.createElement('option');
+                        option.value = group;
+                        option.textContent = group;
+                        groupSelect.appendChild(option);
+                    });
+                }
+            } catch (err) {
+                console.error('加载分组失败:', err);
+            }
+        }
+
+        // 生成UUID
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                const r = Math.random() * 16 | 0;
+                const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                return v.toString(16);
+            });
+        }
+
+        // 新增blog
+        async function addNewBlog() {
+            const token = localStorage.getItem('github-token');
+            if (!token) {
+                showAddBlogStatus('请先登录', true);
+                return;
+            }
+
+            const group = dom.newBlogGroup.value.trim();
+            const title = dom.newBlogTitle.value.trim();
+            const tags = dom.newBlogTags.value.split(',').map(t => t.trim()).filter(t => t);
+            const content = dom.newBlogContent.value.trim();
+
+            // 验证必填字段
+            if (!group) {
+                showAddBlogStatus('请选择分组', true);
+                return;
+            }
+            if (!title) {
+                showAddBlogStatus('请输入标题', true);
+                return;
+            }
+            if (!content) {
+                showAddBlogStatus('请输入博客内容', true);
+                return;
+            }
+
+            try {
+                showAddBlogStatus('保存中...');
+
+                const octokit = new Octokit({ auth: token });
+
+                // 生成文件路径：blog/<group>/<title>.md
+                const filePath = `blog/${group}/${title}.md`;
+                const encodedContent = btoa(unescape(encodeURIComponent(content)));
+
+                // 创建新文件
+                await octokit.rest.repos.createOrUpdateFileContents({
+                    owner: config.owner,
+                    repo: config.repo,
+                    path: filePath,
+                    message: `新增博客: ${title}`,
+                    content: encodedContent,
+                    branch: config.branch
+                });
+
+                // 更新blog-config.json
+                const configResponse = await octokit.rest.repos.getContent({
+                    owner: config.owner,
+                    repo: config.repo,
+                    path: 'blog-config.json',
+                    ref: config.branch
+                });
+
+                const configContent = atob(configResponse.data.content);
+                let blogConfig = JSON.parse(configContent);
+
+                // 确保有 blogs 字段
+                if (!blogConfig.blogs) {
+                    blogConfig.blogs = {};
+                }
+                if (!blogConfig.blogs[group]) {
+                    blogConfig.blogs[group] = [];
+                }
+                blogConfig.blogs[group].push({
+                    blog_uuid: generateUUID(), // 使用配置文件中的字段名
+                    title: title,
+                    description: title, // 简单描述
+                    tags: tags.length > 0 ? tags : ['未分类'],
+                    path: filePath
+                });
+
+                // 更新配置文件
+                const encodedConfig = btoa(unescape(encodeURIComponent(JSON.stringify(blogConfig, null, 2))));
+                await octokit.rest.repos.createOrUpdateFileContents({
+                    owner: config.owner,
+                    repo: config.repo,
+                    path: 'blog-config.json',
+                    message: `更新blog配置: 新增 ${title}`,
+                    content: encodedConfig,
+                    sha: configResponse.data.sha,
+                    branch: config.branch
+                });
+
+                showAddBlogStatus('新增成功！');
+                setTimeout(() => {
+                    dom.addBlogModal.style.display = 'none';
+                    clearAddBlogForm();
+                    // 刷新博客列表
+                    initBlog();
+                }, 1500);
+
+            } catch (error) {
+                console.error('新增blog失败:', error);
+                showAddBlogStatus(`新增失败: ${error.message}`, true);
+            }
+        }
+
+        // 显示新增blog状态
+        function showAddBlogStatus(msg, isError = false) {
+            dom.addBlogStatus.textContent = msg;
+            dom.addBlogStatus.className = isError ? 'status error' : 'status success';
         }
 
         // 显示编辑状态
