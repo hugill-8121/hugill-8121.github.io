@@ -469,9 +469,7 @@
 
             // 点击卡片进入查看模式
             card.addEventListener('click', () => {
-                currentBlog = article;
-                switchToShow(article, dom);
-                loadBlogContent(article, dom, renderMarkdown);
+                window.location.href = `blog-show.html?blog=${encodeURIComponent(article.title)}`;
             });
 
             return card;

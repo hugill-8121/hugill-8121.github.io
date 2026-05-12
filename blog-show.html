@@ -54,14 +54,14 @@
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-javascript.min.js"></script>
-    <script src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
-    <script type="text/x-mathjax-config">
-        MathJax.Hub.Config({
-            tex2jax: {
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
+    <script>
+        MathJax = {
+            tex: {
                 inlineMath: [['$','$'], ["\\(","\\)"]],
                 processEscapes: true
             }
-        });
+        };
     </script>
 
     <script type="module">
@@ -101,18 +101,17 @@
         // 编辑文章
         document.getElementById('edit-blog').addEventListener('click', () => {
             const params = getUrlParams();
-            window.location.href = `../blog-edit.html?group=${params.group}&blog=${params.blog}`;
+            window.location.href = `../blog-edit.html?blog=${params.blog}`;
         });
 
         // 主函数
         async function init() {
             try {
                 const params = getUrlParams();
-                const group = params.group;
                 const blog = params.blog;
 
-                if (!group || !blog) {
-                    throw new Error('缺少必要参数: group和blog');
+                if (!blog) {
+                    throw new Error('缺少必要参数: blog');
                 }
 
                 // 解析仓库信息
@@ -128,15 +127,18 @@
                 }
                 const config = await configResponse.json();
 
-                // 查找对应的博客信息
-                const groupConfig = config[group];
-                if (!groupConfig) {
-                    throw new Error(`找不到分组: ${group}`);
+                // 遍历所有分组查找对应的博客信息
+                let blogInfo = null;
+                for (const groupName in config) {
+                    const found = config[groupName].find(item => item.title === blog);
+                    if (found) {
+                        blogInfo = found;
+                        break;
+                    }
                 }
 
-                const blogInfo = groupConfig.find(item => item.title === blog);
                 if (!blogInfo) {
-                    throw new Error(`在分组 ${group} 中找不到博客: ${blog}`);
+                    throw new Error(`找不到博客: ${blog}`);
                 }
 
                 // 显示博客标题和标签
