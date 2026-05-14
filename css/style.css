@@ -935,6 +935,47 @@ h1 {
     padding: 0.5rem;
 }
 
+/* 资源搜索框 */
+.resource-search {
+    position: relative;
+    padding: 0 0.5rem 0.5rem 0.5rem;
+}
+
+.resource-search-input {
+    width: 100%;
+    padding: 0.4rem 0.6rem;
+    padding-right: 2rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.resource-search-input:focus {
+    border-color: #3b82f6;
+}
+
+.resource-search-clear {
+    position: absolute;
+    right: 0.8rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: #9ca3af;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0;
+    width: 16px;
+    height: 16px;
+    line-height: 1;
+}
+
+.resource-search-clear:hover {
+    color: #6b7280;
+}
+
 .tree-item {
     padding: 0.4rem 0.6rem;
     cursor: pointer;
