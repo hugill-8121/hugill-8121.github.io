@@ -29,6 +29,18 @@
           "后端"
         ]
       }
+    ],
+    "hctools/log": [
+      {
+        "blog_uuid": "89498686-fca1-4835-bd70-c4e48326f1d9",
+        "title": "日志模块设计说明",
+        "description": "日志模块设计说明",
+        "path": "blog/hctools/log/日志模块设计说明.md",
+        "tags": [
+          "hctools",
+          "C/C++"
+        ]
+      }
     ]
   }
 }
