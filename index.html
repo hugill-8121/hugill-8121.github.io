@@ -57,6 +57,10 @@
                 <span id="modal-user-login">-</span>
             </div>
             <div class="info-item-left">
+                <strong>Token 权限（X-OAuth-Scopes）：</strong>
+                <span id="modal-oauth-scopes" style="word-break: break-all;">-</span>
+            </div>
+            <div class="info-item-left">
                 <strong>Core API 剩余次数：</strong>
                 <span id="modal-core-remaining">-</span> / <span id="modal-core-limit">-</span>
             </div>
@@ -297,6 +301,7 @@
         import {
             createOctokit,
             getUserInfo,
+            getUserInfoWithMeta,
             getRateLimit,
             batchGetFileCommits,
             fetchBlogConfig,
@@ -2848,11 +2853,14 @@
                 try {
                     let token = getGithubToken();
                     let loginName = '未登录（匿名限额）';
+                    let scopesText = '匿名请求（无 Token）';
 
                     if (token) {
                         try {
-                            const user = await getUserInfo(token);
+                            const { user, headers } = await getUserInfoWithMeta(token);
                             loginName = user.login;
+                            const scopes = String(headers['x-oauth-scopes'] || '').trim();
+                            scopesText = scopes || '空（细粒度 Token 请在 GitHub 设置中查看）';
                         } catch (error) {
                             if (!isAuthError(error)) throw error;
                             handleAuthFailure('GitHub Token 已失效（Bad credentials），已切换为匿名查询限额。');
@@ -2863,6 +2871,7 @@
                     const rateLimit = await getRateLimit(token);
 
                     document.getElementById('modal-user-login').textContent = loginName;
+                    document.getElementById('modal-oauth-scopes').textContent = scopesText;
                     document.getElementById('modal-core-remaining').textContent = rateLimit.resources.core.remaining;
                     document.getElementById('modal-core-limit').textContent = rateLimit.resources.core.limit;
                     document.getElementById('modal-core-reset').textContent = new Date(rateLimit.resources.core.reset * 1000).toLocaleString();

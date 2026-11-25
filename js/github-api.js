@@ -180,6 +180,17 @@ async function getUserInfo(token) {
 }
 
 /**
+ * 获取用户信息，同时返回响应头（用于读取 X-OAuth-Scopes 等 Token 元信息）
+ * @param {string} token
+ * @returns {Promise<{user: Object, headers: Object}>}
+ */
+async function getUserInfoWithMeta(token) {
+    const octokit = createOctokit(token);
+    const response = await octokit.rest.users.getAuthenticated();
+    return { user: response.data, headers: response.headers || {} };
+}
+
+/**
  * 获取 API 限流状态（不传 Token 时返回匿名限额）
  * @param {string} [token]
  * @returns {Promise<Object>}
@@ -433,6 +444,7 @@ export {
     Octokit,
     getFileCommits,
     getUserInfo,
+    getUserInfoWithMeta,
     getRateLimit,
     batchGetFileCommits,
     fetchBlogConfig,
