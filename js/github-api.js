@@ -47,6 +47,23 @@ function buildHeaders(token) {
     return headers;
 }
 
+// 关闭 Octokit 的自动限流重试：被限流时立即返回 403，交给界面给出可读提示，
+// 否则插件会挂起几十秒，表现为“资源栏一直加载中”。
+const NO_THROTTLE = {
+    onRateLimit: () => false,
+    onSecondaryRateLimit: () => false
+};
+
+/**
+ * 统一的 Octokit 工厂（匿名/带 Token 都可以）
+ * @param {string} [token]
+ * @returns {Octokit}
+ */
+export function createOctokit(token) {
+    const auth = sanitizeToken(token);
+    return new Octokit(Object.assign(auth ? { auth } : {}, { throttle: NO_THROTTLE }));
+}
+
 function makeRequestError(message, status) {
     const error = new Error(message);
     error.status = status;
@@ -157,7 +174,7 @@ async function batchGetFileCommits(owner, repo, paths, branch, token, perPage = 
  * @returns {Promise<Object>}
  */
 async function getUserInfo(token) {
-    const octokit = new Octokit({ auth: sanitizeToken(token) || undefined });
+    const octokit = createOctokit(token);
     const { data } = await octokit.rest.users.getAuthenticated();
     return data;
 }
@@ -168,7 +185,7 @@ async function getUserInfo(token) {
  * @returns {Promise<Object>}
  */
 async function getRateLimit(token) {
-    const octokit = new Octokit({ auth: sanitizeToken(token) || undefined });
+    const octokit = createOctokit(token);
     const { data } = await octokit.rest.rateLimit.get();
     return data;
 }

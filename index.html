@@ -276,7 +276,7 @@
     <!-- 主逻辑（模块入口） -->
     <script type="module">
         import {
-            Octokit,
+            createOctokit,
             getUserInfo,
             getRateLimit,
             batchGetFileCommits,
@@ -975,7 +975,7 @@
             const token = getGithubToken();
             const repoInfo = { owner: config.owner, repo: config.repo, branch: config.branch };
             const fetchPaths = async (auth) => {
-                const octokit = new Octokit(auth ? { auth } : {});
+                const octokit = createOctokit(auth);
                 const items = await listRepoPaths(octokit, repoInfo, RESOURCE_ROOT);
                 return items.filter(item => item.path !== RESOURCE_ROOT);
             };
@@ -1172,7 +1172,10 @@
             } catch (error) {
                 console.error('加载资源目录失败:', error);
                 resourceTreeLoaded = false;
-                dom.resourceTree.innerHTML = `<div class="resource-empty error">加载失败: ${escapeHtml(error.message)}</div>`;
+                const message = (error && (error.status === 403 || /403/.test(error.message)))
+                    ? 'GitHub API 匿名限额已用尽（60 次/小时），登录后可继续加载资源，或稍后重试'
+                    : error.message;
+                dom.resourceTree.innerHTML = `<div class="resource-empty error">加载失败: ${escapeHtml(message)}</div>`;
             }
         }
 
@@ -1325,7 +1328,7 @@
             if (!confirm(`确定删除资源文件 ${filePath} 吗？此操作会直接提交到仓库。`)) return;
 
             try {
-                const octokit = new Octokit({ auth: token });
+                const octokit = createOctokit(token);
                 const result = await deleteRepoFiles(
                     { octokit, owner: config.owner, repo: config.repo, branch: config.branch },
                     [filePath],
@@ -1368,7 +1371,7 @@
 
             try {
                 if (remoteFiles.length > 0) {
-                    const octokit = new Octokit({ auth: token });
+                    const octokit = createOctokit(token);
                     const result = await deleteRepoFiles(
                         { octokit, owner: config.owner, repo: config.repo, branch: config.branch },
                         remoteFiles,
@@ -1414,7 +1417,7 @@
                 return { success: false, error: '未登录' };
             }
 
-            const octokit = new Octokit({ auth: token });
+            const octokit = createOctokit(token);
             const batch = new CommitBatch({
                 octokit,
                 owner: config.owner,
@@ -2287,7 +2290,7 @@
 
                 try {
                     showEditStatus('保存中...');
-                    const octokit = new Octokit({ auth: token });
+                    const octokit = createOctokit(token);
                     const repoInfo = { owner: config.owner, repo: config.repo, branch: config.branch };
 
                     // 1. 读取远端配置（UTF-8 安全解码）
