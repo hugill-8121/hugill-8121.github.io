@@ -497,60 +497,26 @@
             return confirm(`当前有 ${dirtyTabs.size} 个标签页存在未保存的修改，确定要${action}吗？未保存的内容将丢失。`);
         }
 
-        // 打开新增模式
+        // 打开新增模式：与编辑共用同一条标签页/表单/保存链路，且不丢弃已打开的文章
         async function openNewBlogMode() {
-            if (!confirmDiscardChanges('新建博客')) return;
+            const existingDraft = openTabs.find(tab => tab.isNew);
+            if (existingDraft) {
+                switchToTab(existingDraft.id);
+                showEditContainer();
+                await loadGroupsForEdit();
+                document.getElementById('edit-group').value = existingDraft.blog.group || '';
+                if (!resourceTreeLoaded) await renderResourceTree();
+                return;
+            }
 
-            document.getElementById('edit-form-title').textContent = '新增博客';
-            document.getElementById('edit-group-group').style.display = 'block';
-            document.getElementById('save-edit').textContent = '确认新增';
-
-            // 清空表单
-            document.getElementById('edit-group').value = '';
-            document.getElementById('edit-title').value = '';
-            renderEditorTags([]);
-            dom.editTags.value = '';
-            document.getElementById('edit-content').value = '';
-            document.getElementById('edit-status').textContent = '';
-
-            // 加载分组列表
-            await loadGroupsForEdit();
-
-            // 切换到编辑容器
-            dom.containers.list.classList.add('container-hidden');
-            dom.containers.list.classList.remove('container-active');
-            dom.containers.show.classList.add('container-hidden');
-            dom.containers.show.classList.remove('container-active');
-            dom.containers.edit.classList.add('container-active');
-            dom.containers.edit.classList.remove('container-hidden');
-
-            // 隐藏左侧时间过滤器
-            document.querySelector('.sidebar-left').style.display = 'none';
-
-            // 清空并建立一个空白草稿标签（保存逻辑依赖 activeTabId，不能留空）
-            openTabs = [];
-            editedContents.clear();
-            originalContents.clear();
-            dirtyTabs.clear();
-
-            const draftId = generateTabId();
-            const draftBlog = { uuid: draftId, title: '', tags: [], group: '', path: '' };
-            openTabs.push({
-                id: draftId,
-                title: '(未命名)',
-                blog: draftBlog,
-                isNew: true,
-                originalTitle: '',
-                originalTags: []
-            });
-            activeTabId = draftId;
-            currentEditFile = draftBlog;
-            editedContents.set(draftId, '');
-            originalContents.set(draftId, '');
-            renderTabs();
-
-            // 资源树只在这里加载一次
-            await renderResourceTree();
+            const draftBlog = {
+                uuid: generateTabId(),
+                title: '',
+                tags: [],
+                group: '',
+                path: ''
+            };
+            await openFileInTab(draftBlog, true);
         }
 
         // 生成唯一标签ID
@@ -602,7 +568,7 @@
 
             const newTab = {
                 id: tabId,
-                title: tabBlog.title,
+                title: tabBlog.title || '(未命名)',
                 blog: tabBlog,
                 isNew,
                 originalTitle: tabBlog.title || '',
@@ -645,11 +611,10 @@
             renderTabs();
             showEditContainer();
 
-            if (!isNew) {
-                await loadGroupsForEdit();
-                const groupSelect = document.getElementById('edit-group');
-                if (blog.group) groupSelect.value = blog.group;
-            }
+            // 新增与编辑统一在这里加载分组列表；新增时从空值开始选
+            await loadGroupsForEdit();
+            const groupSelect = document.getElementById('edit-group');
+            groupSelect.value = isNew ? '' : (blog.group || '');
 
             renderFileTree();
             if (!resourceTreeLoaded) await renderResourceTree();
@@ -738,6 +703,10 @@
             editedContents.set(activeTabId, dom.editContent.value);
             tab.blog.title = dom.editTitle.value.trim();
             tab.blog.tags = getEditorTags();
+            if (tab.isNew) {
+                const groupSelect = document.getElementById('edit-group');
+                if (groupSelect) tab.blog.group = groupSelect.value;
+            }
             tab.title = tab.blog.title || '(未命名)';
             updateDirtyState(activeTabId);
         }
@@ -748,7 +717,8 @@
 
             const content = editedContents.get(tabId) ?? '';
             if (tab.isNew) {
-                return content.trim() !== '' || (tab.blog.title || '') !== '' || (tab.blog.tags || []).length > 0;
+                return content.trim() !== '' || (tab.blog.title || '') !== '' || (tab.blog.tags || []).length > 0
+                    || (tab.blog.group || '') !== '';
             }
 
             const originalContent = originalContents.get(tabId) ?? '';
@@ -783,6 +753,13 @@
             dom.editTags.value = '';
             dom.editContent.value = editedContents.get(tabId) ?? '';
             currentEditFile = tab.blog;
+
+            if (tab.isNew) {
+                loadGroupsForEdit().then(() => {
+                    const groupSelect = document.getElementById('edit-group');
+                    if (groupSelect && activeTabId === tabId) groupSelect.value = tab.blog.group || '';
+                });
+            }
 
             renderTabs();
             renderFileTree();
@@ -1084,15 +1061,31 @@
                 if (!result.success) throw new Error(result.error);
 
                 // 立即写入本地缓存，不再为“看到新目录”多打一次 API
-                if (!blogFolderPaths.includes(folderPath)) blogFolderPaths.push(folderPath);
+                const folderParts = folderPath.split('/');
+                for (let i = 2; i <= folderParts.length; i++) {
+                    const partPath = folderParts.slice(0, i).join('/');
+                    if (!blogFolderPaths.includes(partPath)) blogFolderPaths.push(partPath);
+                }
                 if (repoTreeState.items) {
-                    repoTreeState.items.push({ path: placeholder, type: 'file', size: 0 });
-                    const parts = folderPath.split('/');
-                    for (let i = 2; i <= parts.length; i++) {
-                        repoTreeState.items.push({ path: parts.slice(0, i).join('/'), type: 'folder', size: 0 });
+                    const addItem = (path, type) => {
+                        if (!repoTreeState.items.some(item => item.path === path && item.type === type)) {
+                            repoTreeState.items.push({ path, type, size: 0 });
+                        }
+                    };
+                    addItem(placeholder, 'file');
+                    for (let i = 2; i <= folderParts.length; i++) {
+                        addItem(folderParts.slice(0, i).join('/'), 'folder');
                     }
                 }
                 renderFileTree();
+
+                // 新目录要能立刻作为“新增博客”的分组被选中
+                const groupSelect = document.getElementById('edit-group');
+                if (groupSelect) {
+                    const previous = groupSelect.value;
+                    await loadGroupsForEdit();
+                    if (previous) groupSelect.value = previous;
+                }
                 showToast(`已创建目录：/${folderPath}`);
             } catch (error) {
                 console.error('新建博客目录失败:', error);
@@ -2527,6 +2520,11 @@
                 if (e.target === dom.tagEditor || e.target === dom.tagChips) dom.editTags.focus();
             });
 
+            // 新增模式的分组选择也纳入未保存状态
+            document.getElementById('edit-group').addEventListener('change', () => {
+                if (activeTabId) snapshotActiveTab();
+            });
+
             // 保存编辑事件（新增/编辑：一次提交同时写入 md 与 blog-config.json）
             dom.saveEdit.addEventListener('click', async () => {
                 const token = getGithubToken();
@@ -2564,13 +2562,14 @@
 
                 let group = '';
                 if (isNew) {
-                    group = document.getElementById('edit-group').value.trim();
+                    group = document.getElementById('edit-group').value.trim().replace(/^\/+|\/+$/g, '');
                     if (!group) {
                         showEditStatus('请选择分组', true);
                         return;
                     }
-                    if (group.includes('/') || group.includes('\\')) {
-                        showEditStatus('分组不能包含斜杠', true);
+                    // 允许 blog 下的多级目录作为分组，但每一段都必须合法
+                    if (/[\\<>:"|?*]/.test(group) || group.split('/').some(part => !part || part === '.' || part === '..')) {
+                        showEditStatus('分组名称不合法（不能含 \\ < > : " | ? *，也不能有空段）', true);
                         return;
                     }
                 }
@@ -2581,6 +2580,16 @@
                 if (!filePath) {
                     showEditStatus('找不到文件路径', true);
                     return;
+                }
+
+                // 新增时防止覆盖同目录下已有文章（与编辑的“打开已有文件”保持同一套路径规则）
+                if (isNew) {
+                    const pathExists = allBlogs.some(blog => blog.path === filePath)
+                        || (repoTreeState.items || []).some(item => item.type === 'file' && item.path === filePath);
+                    if (pathExists) {
+                        showEditStatus('该分组下已存在同名文章，请修改标题', true);
+                        return;
+                    }
                 }
 
                 dom.saveEdit.disabled = true;
@@ -2714,6 +2723,12 @@
                         blogFolderPaths = repoTreeState.items
                             .filter(item => item.type === 'folder' && item.path.startsWith('blog/'))
                             .map(item => item.path);
+                    } else {
+                        const parts = filePath.split('/');
+                        for (let i = 2; i < parts.length; i++) {
+                            const folderPath = parts.slice(0, i).join('/');
+                            if (!blogFolderPaths.includes(folderPath)) blogFolderPaths.push(folderPath);
+                        }
                     }
                     committedResourceFiles.forEach(path => {
                         if (!resourceRemotePaths.some(item => item.path === path)) {
@@ -2936,15 +2951,28 @@
                     blogConfigData = config;
                 }
                 const groupSelect = document.getElementById('edit-group');
+                const previous = groupSelect.value;
                 groupSelect.innerHTML = '<option value="">请选择分组</option>';
-                // 适配配置文件格式，博客数据在 blogs 字段下
+
+                // 分组候选 = 配置文件里的分组 + blog 下实际存在的文件夹 + 已加载博客的分组
                 const blogs = config.blogs || config;
-                Object.keys(blogs).forEach(group => {
+                const groups = new Set(Object.keys(blogs));
+                (blogFolderPaths || []).forEach(path => {
+                    const relative = String(path || '').replace(/^blog\//, '');
+                    if (relative) groups.add(relative);
+                });
+                allBlogs.forEach(blog => {
+                    if (blog.group) groups.add(blog.group);
+                });
+
+                Array.from(groups).sort((a, b) => a.localeCompare(b, 'zh')).forEach(group => {
                     const option = document.createElement('option');
                     option.value = group;
                     option.textContent = group;
                     groupSelect.appendChild(option);
                 });
+
+                if (previous && groups.has(previous)) groupSelect.value = previous;
             } catch (err) {
                 console.error('加载分组失败:', err);
             }
