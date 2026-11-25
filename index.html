@@ -1109,12 +1109,22 @@
                 }
                 renderFileTree();
 
-                // 新目录要能立刻作为“新增博客”的分组被选中
+                // 新目录要能立刻出现在“新增博客”的分组下拉；如果正开着新增草稿且还没选分组，直接选中它
                 const groupSelect = document.getElementById('edit-group');
                 if (groupSelect) {
                     const previous = groupSelect.value;
+                    if (!Array.from(groupSelect.options).some(item => item.value === name)) {
+                        groupSelect.appendChild(new Option(name, name));
+                    }
                     await loadGroupsForEdit();
-                    if (previous) groupSelect.value = previous;
+
+                    const activeTab = openTabs.find(tab => tab.id === activeTabId);
+                    if (activeTab && activeTab.isNew && (!previous || previous === name)) {
+                        groupSelect.value = name;
+                        groupSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                    } else if (previous) {
+                        groupSelect.value = previous;
+                    }
                 }
                 showToast(`已创建目录：/${folderPath}`);
             } catch (error) {
