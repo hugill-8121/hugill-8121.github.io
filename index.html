@@ -84,6 +84,27 @@
         </div>
     </div>
 
+    <!-- 上传资源：先选择 asserts 下的目标文件夹 -->
+    <div class="api-status-modal" id="resource-upload-modal">
+        <div class="modal-content resource-upload-modal-content">
+            <h3 class="modal-title"><i class="fa fa-upload"></i> 上传资源</h3>
+            <div class="form-group">
+                <label for="resource-upload-folder">上传到 asserts 下的文件夹</label>
+                <div class="group-row">
+                    <select id="resource-upload-folder" class="modal-input"></select>
+                    <button type="button" class="group-add-btn" id="resource-upload-new-folder" title="在目标文件夹下新建子文件夹">
+                        <i class="fa fa-folder-plus"></i> 新建
+                    </button>
+                </div>
+                <p class="resource-upload-hint" id="resource-upload-hint">目标：asserts（根目录）</p>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel" id="resource-upload-cancel">取消</button>
+                <button type="button" class="btn-confirm" id="resource-upload-choose">选择文件并上传</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 文件右键菜单 -->
     <div class="context-menu" id="file-context-menu">
         <div class="context-menu-item" id="ctx-copy-path">
@@ -262,12 +283,8 @@
                         <input type="text" id="resource-search-input" class="resource-search-input" placeholder="搜索资源...">
                         <button id="resource-search-clear" class="resource-search-clear" style="display: none;">×</button>
                     </div>
-                    <div class="resource-target">
-                        <label for="resource-upload-folder">上传到</label>
-                        <select id="resource-upload-folder" class="resource-upload-folder"></select>
-                    </div>
                     <div class="resource-toolbar">
-                        <button type="button" id="resource-upload-btn" class="resource-tool-btn">
+                        <button type="button" id="resource-upload-btn" class="resource-tool-btn" title="先选择 asserts 下的目标文件夹，再选择文件">
                             <i class="fa fa-upload"></i> 上传
                         </button>
                         <button type="button" id="resource-new-folder-btn" class="resource-tool-btn">
@@ -393,6 +410,12 @@
             // API状态弹窗
             apiStatusModal: document.getElementById('api-status-modal'),
             closeModalBtn: document.getElementById('close-modal'),
+            // 资源上传弹窗
+            resourceUploadModal: document.getElementById('resource-upload-modal'),
+            resourceUploadHint: document.getElementById('resource-upload-hint'),
+            resourceUploadNewFolder: document.getElementById('resource-upload-new-folder'),
+            resourceUploadCancel: document.getElementById('resource-upload-cancel'),
+            resourceUploadChoose: document.getElementById('resource-upload-choose'),
             // 新增blog相关
             addBlogItem: document.getElementById('add-blog-item'),
             newCategoryBtn: document.getElementById('new-category-btn'),
@@ -1225,6 +1248,30 @@
 
             resourceUploadTarget = sorted.includes(desired) ? desired : RESOURCE_ROOT;
             select.value = resourceUploadTarget;
+            updateResourceUploadHint();
+        }
+
+        function updateResourceUploadHint() {
+            if (!dom.resourceUploadHint) return;
+            const target = dom.resourceUploadFolder.value || RESOURCE_ROOT;
+            dom.resourceUploadHint.textContent = target === RESOURCE_ROOT
+                ? `目标：${RESOURCE_ROOT}（根目录）`
+                : `目标：${target}`;
+        }
+
+        function openResourceUploadModal() {
+            if (!getGithubToken()) {
+                alert('请先登录后再上传资源');
+                return;
+            }
+            refreshResourceUploadFolders();
+            dom.resourceUploadFolder.value = resourceUploadTarget;
+            updateResourceUploadHint();
+            dom.resourceUploadModal.style.display = 'flex';
+        }
+
+        function closeResourceUploadModal() {
+            if (dom.resourceUploadModal) dom.resourceUploadModal.style.display = 'none';
         }
 
         function encodeRepoPathLocal(path) {
@@ -3089,11 +3136,34 @@
             // 资源工具条：上传 / 新建文件夹
             dom.resourceUploadFolder.addEventListener('change', () => {
                 resourceUploadTarget = dom.resourceUploadFolder.value || RESOURCE_ROOT;
+                updateResourceUploadHint();
             });
 
             dom.resourceUploadBtn.addEventListener('click', () => {
+                openResourceUploadModal();
+            });
+
+            dom.resourceUploadChoose.addEventListener('click', () => {
                 const target = dom.resourceUploadFolder.value || RESOURCE_ROOT;
+                resourceUploadTarget = target;
+                closeResourceUploadModal();
                 pickResourceFiles(target);
+            });
+
+            dom.resourceUploadCancel.addEventListener('click', closeResourceUploadModal);
+
+            dom.resourceUploadModal.addEventListener('click', (event) => {
+                if (event.target === dom.resourceUploadModal) closeResourceUploadModal();
+            });
+
+            dom.resourceUploadNewFolder.addEventListener('click', () => {
+                if (!getGithubToken()) {
+                    alert('请先登录后再新建文件夹');
+                    return;
+                }
+                const parent = dom.resourceUploadFolder.value || RESOURCE_ROOT;
+                const rawName = prompt(`在 ${parent} 下新建文件夹名称（支持多级，如 images/2026）：`);
+                if (rawName && rawName.trim()) queueResourceFolder(parent, rawName.trim());
             });
 
             dom.resourceNewFolderBtn.addEventListener('click', () => {

@@ -1287,30 +1287,16 @@ h1 {
     cursor: default;
 }
 
-/* ===== 资源上传目标选择 ===== */
-.resource-target {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0 0.75rem 0.5rem;
-    font-size: 12px;
+/* ===== 资源上传弹窗 ===== */
+.resource-upload-modal-content {
+    max-width: 520px;
+}
+
+.resource-upload-hint {
+    margin-top: 0.5rem;
     color: #64748b;
-}
-
-.resource-target label {
-    flex: none;
-    white-space: nowrap;
-}
-
-.resource-upload-folder {
-    flex: 1;
-    min-width: 0;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    background: #fff;
-    color: #334155;
     font-size: 12px;
-    padding: 4px 6px;
+    word-break: break-all;
 }
 
 .resource-toolbar {
