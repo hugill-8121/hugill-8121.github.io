@@ -1251,6 +1251,36 @@ h1 {
 }
 
 /* ===== 资源栏工具条 ===== */
+/* ===== 新增博客：分类选择行 ===== */
+.group-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.group-row .modal-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.group-add-btn {
+    flex: none;
+    border: 1px dashed #cbd5e1;
+    background: #f8fafc;
+    color: #475569;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.group-add-btn:hover {
+    border-color: #6366f1;
+    color: #4f46e5;
+    background: #f5f3ff;
+}
+
 .resource-toolbar {
     display: flex;
     gap: 8px;

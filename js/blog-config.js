@@ -78,9 +78,17 @@ export function findBlogEntry(config, key = {}) {
     return null;
 }
 
-function assertSegment(value, label) {
+function assertSegment(value, label, options = {}) {
     const v = String(value ?? '').trim();
     if (!v) throw new Error(`${label}不能为空`);
+    if (options.allowSlash) {
+        // 分组允许映射到 blog 下的多级目录，但每一段仍必须合法
+        const parts = v.split('/');
+        if (v.includes('\\') || parts.some(part => !part || part === '.' || part === '..')) {
+            throw new Error(`${label}不合法：不能包含反斜杠，也不能有空段`);
+        }
+        return v;
+    }
     if (v.includes('/') || v.includes('\\')) throw new Error(`${label}不能包含斜杠`);
     return v;
 }
@@ -134,7 +142,7 @@ export function upsertBlogEntry(config, input) {
         return { config: cfg, action: 'updated', group, entry };
     }
 
-    const group = assertSegment(input.group, '分组');
+    const group = assertSegment(input.group, '分组', { allowSlash: true });
     if (!Array.isArray(cfg.blogs[group])) {
         cfg.blogs[group] = [];
     }

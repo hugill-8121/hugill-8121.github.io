@@ -212,9 +212,14 @@
                         <!-- 分组选择（仅新增模式显示） -->
                         <div class="form-group" id="edit-group-group" style="display: none;">
                             <label for="edit-group">分组 *</label>
-                            <select id="edit-group" class="modal-input">
-                                <option value="">请选择分组</option>
-                            </select>
+                            <div class="group-row">
+                                <select id="edit-group" class="modal-input">
+                                    <option value="">请选择分组</option>
+                                </select>
+                                <button type="button" class="group-add-btn" id="new-category-btn" title="新增一个博客分类">
+                                    <i class="fa fa-plus"></i> 新建分类
+                                </button>
+                            </div>
                         </div>
 
                         <div class="form-group">
@@ -376,6 +381,7 @@
             closeModalBtn: document.getElementById('close-modal'),
             // 新增blog相关
             addBlogItem: document.getElementById('add-blog-item'),
+            newCategoryBtn: document.getElementById('new-category-btn'),
             // 时间过滤器相关
             monthList: document.getElementById('month-list'),
             dateStart: document.getElementById('date-start'),
@@ -482,7 +488,7 @@
         let pendingResourceFiles = new Map();
         // 待创建的资源文件夹（key: 仓库路径, value: { name }）
         let pendingResourceFolders = new Map();
-        let currentFilterTag = null;
+        let selectedTags = new Set(); // 标签云多选（与月份多选一致：命中任一选中标签即可）
         let globalCommitMap = new Map(); // 全局commit信息缓存 {path: commitInfo}
 
         // ==================== 编辑界面相关函数 ====================
@@ -495,6 +501,30 @@
         function confirmDiscardChanges(action) {
             if (!hasUnsavedChanges()) return true;
             return confirm(`当前有 ${dirtyTabs.size} 个标签页存在未保存的修改，确定要${action}吗？未保存的内容将丢失。`);
+        }
+
+        // 新增模式下直接创建一个分类（保存文章时随路径一起落库）
+        function createNewCategory() {
+            const raw = prompt('请输入新分类名称（可用 / 分多级，例如 底层/C++）：');
+            if (raw === null) return;
+
+            const name = raw.trim().replace(/^\/+|\/+$/g, '');
+            if (!name) return;
+            if (/[\\<>:"|?*]/.test(name) || name.split('/').some(part => !part || part === '.' || part === '..')) {
+                alert('分类名称不合法：不能包含 \\ < > : " | ? *，也不能有空段');
+                return;
+            }
+
+            const groupSelect = document.getElementById('edit-group');
+            let option = Array.from(groupSelect.options).find(item => item.value === name);
+            if (!option) {
+                option = new Option(name, name);
+                groupSelect.appendChild(option);
+                showEditStatus(`已新建分类「${name}」，保存文章后生效`);
+            }
+            groupSelect.value = name;
+            groupSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            groupSelect.focus();
         }
 
         // 打开新增模式：与编辑共用同一条标签页/表单/保存链路，且不丢弃已打开的文章
@@ -1539,6 +1569,7 @@
             const name = filePath.split('/').pop();
 
             if (isPending || pendingResourceFiles.has(filePath)) {
+                if (!confirm(`确定从待提交队列移除资源文件 ${filePath} 吗？`)) return;
                 pendingResourceFiles.delete(filePath);
                 renderResourceTreeFromCache();
                 return;
@@ -1584,7 +1615,8 @@
                 .filter(path => path === folderPath || path.startsWith(folderPath + '/'));
 
             if (remoteFiles.length === 0 && pendingFiles.length === 0 && pendingFolders.length === 0) {
-                // 只是空文件夹，直接移除
+                // 只是空文件夹，移除前同样确认
+                if (!confirm(`确定移除空文件夹 ${folderPath} 吗？`)) return;
                 pendingResourceFolders.delete(folderPath);
                 renderResourceTreeFromCache();
                 return;
@@ -2110,39 +2142,43 @@
             dom.blogContainer.insertBefore(hint, dom.blogContainer.firstChild);
         }
 
-        // 渲染标签云
+        // 渲染标签云（支持多选，选中多个标签时取并集）
         function renderTags() {
             if (!dom.tagsContainer) return;
+
+            // 清理已不存在的标签，避免文章改标签后筛选永远为空
+            Array.from(selectedTags).forEach(tag => {
+                if (!allTags.has(tag)) selectedTags.delete(tag);
+            });
 
             dom.tagsContainer.innerHTML = '';
 
             const allTagEl = document.createElement('span');
-            allTagEl.className = 'tag active';
+            allTagEl.className = 'tag' + (selectedTags.size === 0 ? ' active' : '');
             allTagEl.textContent = '全部';
             allTagEl.addEventListener('click', () => {
-                dom.tagsContainer.querySelectorAll('.tag').forEach(tag => tag.classList.remove('active'));
-                allTagEl.classList.add('active');
-                currentFilterTag = null;
+                selectedTags.clear();
+                renderTags();
                 renderBlogs();
             });
             dom.tagsContainer.appendChild(allTagEl);
 
             Array.from(allTags).forEach(tag => {
                 const tagEl = document.createElement('span');
-                tagEl.className = 'tag';
+                tagEl.className = 'tag' + (selectedTags.has(tag) ? ' active' : '');
                 tagEl.textContent = tag;
-                if (currentFilterTag === tag) {
-                    tagEl.classList.add('active');
-                    allTagEl.classList.remove('active');
-                }
+                tagEl.title = '点击切换筛选';
 
                 tagEl.addEventListener('click', () => {
-                    dom.tagsContainer.querySelectorAll('.tag').forEach(t => t.classList.remove('active'));
-                    tagEl.classList.add('active');
-                    currentFilterTag = tag;
+                    if (selectedTags.has(tag)) {
+                        selectedTags.delete(tag);
+                    } else {
+                        selectedTags.add(tag);
+                    }
+                    renderTags();
                     renderBlogs();
                 });
-                
+
                 dom.tagsContainer.appendChild(tagEl);
             });
         }
@@ -2153,9 +2189,9 @@
 
             dom.blogContainer.innerHTML = '';
 
-            // 应用标签过滤
-            let filteredBlogs = currentFilterTag
-                ? allBlogs.filter(blog => blog.tags.includes(currentFilterTag))
+            // 应用标签过滤（多选：命中任一选中标签即可，与月份多选保持一致）
+            let filteredBlogs = selectedTags.size > 0
+                ? allBlogs.filter(blog => (blog.tags || []).some(tag => selectedTags.has(tag)))
                 : allBlogs;
 
             // 应用月份过滤
@@ -2524,6 +2560,7 @@
             document.getElementById('edit-group').addEventListener('change', () => {
                 if (activeTabId) snapshotActiveTab();
             });
+            dom.newCategoryBtn.addEventListener('click', createNewCategory);
 
             // 保存编辑事件（新增/编辑：一次提交同时写入 md 与 blog-config.json）
             dom.saveEdit.addEventListener('click', async () => {
@@ -2963,6 +3000,10 @@
                 });
                 allBlogs.forEach(blog => {
                     if (blog.group) groups.add(blog.group);
+                });
+                // 新增草稿里刚创建、尚未保存的分类也要保留在下拉里
+                openTabs.forEach(tab => {
+                    if (tab.isNew && tab.blog.group) groups.add(tab.blog.group);
                 });
 
                 Array.from(groups).sort((a, b) => a.localeCompare(b, 'zh')).forEach(group => {
