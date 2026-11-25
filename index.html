@@ -242,6 +242,11 @@
                         <input type="text" id="resource-search-input" class="resource-search-input" placeholder="搜索资源...">
                         <button id="resource-search-clear" class="resource-search-clear" style="display: none;">×</button>
                     </div>
+                    <div class="resource-commit-bar">
+                        <button id="commit-resources" class="resource-commit-btn" disabled>
+                            <i class="fa fa-cloud-upload"></i> 提交资源 (<span id="pending-resource-count">0</span>)
+                        </button>
+                    </div>
                     <div class="resource-tree" id="resource-tree">
                         <!-- 资源树将动态生成 -->
                     </div>
@@ -253,6 +258,7 @@
     <!-- 外部资源 -->
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/showdown@2.1.0/dist/showdown.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
@@ -267,22 +273,45 @@
     </script>
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js"></script>
 
-    <!-- 引入GitHub API封装和主逻辑 -->
-    <script type="module" src="./js/github-api.js"></script>
-    <script type="module" src="./js/blog-utils.js"></script>
+    <!-- 主逻辑（模块入口） -->
     <script type="module">
-        import { Octokit, getFileCommits, getUserInfo, getRateLimit, batchGetFileCommits } from './js/github-api.js';
-        import { renderMarkdown, switchToList, switchToShow, switchToEdit, loadBlogContent } from './js/blog-utils.js';
+        import {
+            Octokit,
+            getUserInfo,
+            getRateLimit,
+            batchGetFileCommits,
+            fetchBlogConfig,
+            listRepoPaths,
+            CommitBatch,
+            deleteRepoFiles,
+            sanitizeToken,
+            isAuthError
+        } from './js/github-api.js';
+        import {
+            findBlogEntry,
+            upsertBlogEntry,
+            serializeBlogConfig,
+            makeUuid
+        } from './js/blog-config.js';
+        import { renderMarkdown, switchToShow, loadBlogContent, escapeHtml } from './js/blog-utils.js';
 
         // 全局变量
         let allBlogs = [];
         let allTags = new Set();
         let currentBlog = null;
         const config = {
-            owner: window.location.hostname.split('.github.io')[0],
-            repo: window.location.hostname,
+            // 本地开发时使用默认值，生产环境从 hostname 获取
+            owner: window.location.hostname.includes('.github.io') ? window.location.hostname.split('.github.io')[0] : 'hugill-8121',
+            repo: window.location.hostname.includes('.github.io') ? window.location.hostname : 'hugill-8121.github.io',
             branch: 'main'
         };
+
+        console.log('GitHub 配置:', config);
+
+        // 仓库路径分段编码（兼容中文 / 空格）
+        function encodePath(path) {
+            return String(path || '').split('/').filter(Boolean).map(encodeURIComponent).join('/');
+        }
 
         // DOM元素
         const dom = {
@@ -330,7 +359,6 @@
             closeModalBtn: document.getElementById('close-modal'),
             // 新增blog相关
             addBlogItem: document.getElementById('add-blog-item'),
-            addBlogModal: document.getElementById('add-blog-modal'),
             // 时间过滤器相关
             monthList: document.getElementById('month-list'),
             dateStart: document.getElementById('date-start'),
@@ -352,7 +380,10 @@
             resUploadFile: document.getElementById('res-upload-file'),
             resNewFolder: document.getElementById('res-new-folder'),
             resDeleteFolder: document.getElementById('res-delete-folder'),
-            resDeleteFile: document.getElementById('res-delete-file')
+            resDeleteFile: document.getElementById('res-delete-file'),
+            // 资源提交
+            resourceCommitBtn: document.getElementById('commit-resources'),
+            pendingResourceCount: document.getElementById('pending-resource-count')
         };
 
         // 安全的 localStorage 访问函数
@@ -375,25 +406,81 @@
             }
         }
 
+        // 读取 Token：自动清掉粘贴时带进来的换行、空格、BOM、"token " 前缀
+        function getGithubToken() {
+            const raw = safeGetStorage('github-token');
+            if (!raw) return '';
+            const clean = sanitizeToken(raw);
+            if (clean !== raw) {
+                if (clean) safeSetStorage('github-token', clean);
+                else safeClearToken();
+            }
+            return clean;
+        }
+
+        function safeClearToken() {
+            try {
+                localStorage.removeItem('github-token');
+            } catch (e) {
+                console.warn('无法清理 localStorage:', e);
+            }
+        }
+
+        // 轻量提示条，不打断浏览
+        let toastTimer = null;
+        function showToast(message, isError = false) {
+            let el = document.getElementById('app-toast');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'app-toast';
+                el.className = 'app-toast';
+                document.body.appendChild(el);
+            }
+            el.textContent = message;
+            el.classList.toggle('error', isError);
+            el.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => el.classList.remove('show'), 5000);
+        }
+
+        // Token 失效：清掉本地缓存，降级为匿名读取（公开仓库只读无需 Token）
+        function handleAuthFailure(message) {
+            safeClearToken();
+            updateLoginState(false);
+            showToast(message || 'GitHub Token 已失效，已切换为匿名浏览；保存/上传等写操作需要重新登录。', true);
+        }
+
         // 编辑界面全局变量
         let openTabs = [];
         let activeTabId = null;
         let currentEditFile = null;
-        let editedContents = new Map(); // 存储每个标签页的编辑状态
+        let editedContents = new Map();   // 标签页当前内容 {tabId: content}
+        let originalContents = new Map(); // 标签页打开时的原始内容 {tabId: content}
+        let dirtyTabs = new Set();        // 有未保存修改的标签页
         let selectedMonths = new Set();
-        // 资源文件夹缓存（key: 文件夹路径, value: 文件数组）
-        let resourceFolderCache = new Map();
-        // 待提交的资源文件缓存（key: 文件路径, value: 文件内容）
+        // 待提交的资源文件（key: 仓库路径, value: { name, content(Base64) }）
         let pendingResourceFiles = new Map();
+        // 待创建的资源文件夹（key: 仓库路径, value: { name }）
+        let pendingResourceFolders = new Map();
         let currentFilterTag = null;
         let globalCommitMap = new Map(); // 全局commit信息缓存 {path: commitInfo}
-        let isEditMode = false; // 编辑模式标志，true=编辑，false=新增
 
         // ==================== 编辑界面相关函数 ====================
 
+        // 是否有未保存修改（供新建/关闭/离开时确认）
+        function hasUnsavedChanges() {
+            return dirtyTabs.size > 0;
+        }
+
+        function confirmDiscardChanges(action) {
+            if (!hasUnsavedChanges()) return true;
+            return confirm(`当前有 ${dirtyTabs.size} 个标签页存在未保存的修改，确定要${action}吗？未保存的内容将丢失。`);
+        }
+
         // 打开新增模式
-        function openNewBlogMode() {
-            isEditMode = false;
+        async function openNewBlogMode() {
+            if (!confirmDiscardChanges('新建博客')) return;
+
             document.getElementById('edit-form-title').textContent = '新增博客';
             document.getElementById('edit-group-group').style.display = 'block';
             document.getElementById('save-edit').textContent = '确认新增';
@@ -406,7 +493,7 @@
             document.getElementById('edit-status').textContent = '';
 
             // 加载分组列表
-            loadGroupsForEdit();
+            await loadGroupsForEdit();
 
             // 切换到编辑容器
             dom.containers.list.classList.add('container-hidden');
@@ -419,10 +506,30 @@
             // 隐藏左侧时间过滤器
             document.querySelector('.sidebar-left').style.display = 'none';
 
-            // 清空标签页
+            // 清空并建立一个空白草稿标签（保存逻辑依赖 activeTabId，不能留空）
             openTabs = [];
-            activeTabId = null;
+            editedContents.clear();
+            originalContents.clear();
+            dirtyTabs.clear();
+
+            const draftId = generateTabId();
+            const draftBlog = { uuid: draftId, title: '', tags: [], group: '', path: '' };
+            openTabs.push({
+                id: draftId,
+                title: '(未命名)',
+                blog: draftBlog,
+                isNew: true,
+                originalTitle: '',
+                originalTags: []
+            });
+            activeTabId = draftId;
+            currentEditFile = draftBlog;
+            editedContents.set(draftId, '');
+            originalContents.set(draftId, '');
             renderTabs();
+
+            // 资源树只在这里加载一次
+            await renderResourceTree();
         }
 
         // 生成唯一标签ID
@@ -430,129 +537,168 @@
             return 'tab-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
         }
 
-        // 打开文件到标签页
-        function openFileInTab(blog, isNew = false) {
-            isEditMode = !isNew; // 设置编辑模式标志
+        // 切换编辑表单的"新增/编辑"外观
+        function setEditFormMode(isNew) {
             document.getElementById('edit-form-title').textContent = isNew ? '新增博客' : '编辑文章';
             document.getElementById('edit-group-group').style.display = isNew ? 'block' : 'none';
             document.getElementById('save-edit').textContent = isNew ? '确认新增' : '保存修改';
+        }
 
-            if (!isNew) {
-                // 编辑模式：加载分组列表并设为只读
-                loadGroupsForEdit();
-                const groupSelect = document.getElementById('edit-group');
-                if (blog.group) {
-                    groupSelect.value = blog.group;
-                    groupSelect.disabled = true;
-                }
-            }
-
-            const tabId = blog.uuid || generateTabId();
-
-            // 检查是否已打开
-            const existingTab = openTabs.find(t => t.id === tabId);
-            if (existingTab) {
-                // 如果有未保存的编辑，先保存到Map
-                if (activeTabId && dom.editContent.value !== editedContents.get(activeTabId)) {
-                    editedContents.set(activeTabId, dom.editContent.value);
-                }
-                // 切换到已有标签
-                switchToTab(tabId);
-                return;
-            }
-
-            // 保存当前标签的编辑状态
-            if (activeTabId) {
-                editedContents.set(activeTabId, dom.editContent.value);
-            }
-
-            // 创建新标签
-            const newTab = {
-                id: tabId,
-                title: blog.title,
-                blog: blog,
-                isNew: isNew
-            };
-            openTabs.push(newTab);
-
-            // 加载文件内容
-            if (!isNew && blog.path) {
-                fetch(blog.path)
-                    .then(res => res.text())
-                    .then(content => {
-                        editedContents.set(tabId, content);
-                        if (activeTabId === tabId) {
-                            dom.editContent.value = content;
-                        }
-                    })
-                    .catch(err => {
-                        console.error('加载文件失败:', err);
-                    });
-            }
-
-            // 渲染标签并切换
-            renderTabs();
-            switchToTab(tabId);
-
-            // 切换到编辑容器
+        function showEditContainer() {
             dom.containers.list.classList.add('container-hidden');
             dom.containers.list.classList.remove('container-active');
             dom.containers.show.classList.add('container-hidden');
             dom.containers.show.classList.remove('container-active');
             dom.containers.edit.classList.add('container-active');
             dom.containers.edit.classList.remove('container-hidden');
-
-            // 隐藏左侧时间过滤器
             document.querySelector('.sidebar-left').style.display = 'none';
+        }
+
+        // 打开文件到标签页（isNew = false 表示编辑已有博客）
+        async function openFileInTab(blog, isNew = false) {
+            setEditFormMode(isNew);
+
+            const tabId = String(blog.uuid ?? blog.blog_uuid ?? blog.path ?? generateTabId());
+            const existingTab = openTabs.find(t => t.id === tabId);
+
+            if (existingTab) {
+                snapshotActiveTab();
+                activeTabId = tabId;
+                renderTabs();
+                switchToTab(tabId);
+                showEditContainer();
+                if (!resourceTreeLoaded) await renderResourceTree();
+                return;
+            }
+
+            // 保存当前标签的编辑状态
+            snapshotActiveTab();
+
+            // 用副本，避免表单输入直接改到 allBlogs 里的对象
+            const tabBlog = Object.assign({}, blog, {
+                tags: Array.isArray(blog.tags) ? blog.tags.slice() : []
+            });
+
+            const newTab = {
+                id: tabId,
+                title: tabBlog.title,
+                blog: tabBlog,
+                isNew,
+                originalTitle: tabBlog.title || '',
+                originalTags: (tabBlog.tags || []).slice()
+            };
+            openTabs.push(newTab);
+
+            let content = '';
+            if (!isNew && blog.path) {
+                try {
+                    const res = await fetch(blog.path);
+                    if (!res.ok) throw new Error(`加载失败: ${res.statusText}`);
+                    // 统一成 LF：textarea 会自动把 CRLF 归一为 LF，
+                    // 若保留原始 CRLF，脏检查会永远判定为“已修改”
+                    content = (await res.text()).replace(/\r\n?/g, '\n');
+                } catch (err) {
+                    console.error('加载文件失败:', err);
+                    showEditStatus(`加载文件失败: ${err.message}`, true);
+                }
+            }
+
+            editedContents.set(tabId, content);
+            originalContents.set(tabId, content);
+            dirtyTabs.delete(tabId);
+
+            activeTabId = tabId;
+            currentEditFile = tabBlog;
+
+            dom.editTitle.value = tabBlog.title || '';
+            dom.editTags.value = (tabBlog.tags || []).join(',');
+            dom.editContent.value = content;
+
+            renderTabs();
+            showEditContainer();
+
+            if (!isNew) {
+                await loadGroupsForEdit();
+                const groupSelect = document.getElementById('edit-group');
+                if (blog.group) groupSelect.value = blog.group;
+            }
+
+            renderFileTree();
+            if (!resourceTreeLoaded) await renderResourceTree();
+        }
+
+        // 解析标签输入框
+        function parseTagsInput(value) {
+            return String(value || '').split(',').map(t => t.trim()).filter(Boolean);
+        }
+
+        // 把当前表单内容写回标签状态，并更新脏标记
+        function snapshotActiveTab() {
+            if (!activeTabId) return;
+            const tab = openTabs.find(t => t.id === activeTabId);
+            if (!tab) return;
+
+            editedContents.set(activeTabId, dom.editContent.value);
+            tab.blog.title = dom.editTitle.value.trim();
+            tab.blog.tags = parseTagsInput(dom.editTags.value);
+            tab.title = tab.blog.title || '(未命名)';
+            updateDirtyState(activeTabId);
+        }
+
+        function isTabDirty(tabId) {
+            const tab = openTabs.find(t => t.id === tabId);
+            if (!tab) return false;
+
+            const content = editedContents.get(tabId) ?? '';
+            if (tab.isNew) {
+                return content.trim() !== '' || (tab.blog.title || '') !== '' || (tab.blog.tags || []).length > 0;
+            }
+
+            const originalContent = originalContents.get(tabId) ?? '';
+            const titleChanged = (tab.blog.title || '') !== (tab.originalTitle || '');
+            const tagsChanged = (tab.blog.tags || []).join(',') !== (tab.originalTags || []).join(',');
+            return content !== originalContent || titleChanged || tagsChanged;
+        }
+
+        function updateDirtyState(tabId) {
+            const wasDirty = dirtyTabs.has(tabId);
+            if (isTabDirty(tabId)) {
+                dirtyTabs.add(tabId);
+            } else {
+                dirtyTabs.delete(tabId);
+            }
+            // 仅在脏状态变化时重绘标签，避免每次按键都重建
+            if (wasDirty !== dirtyTabs.has(tabId)) renderTabs();
         }
 
         // 切换到指定标签
         function switchToTab(tabId) {
-            // 保存当前标签的编辑状态
-            if (activeTabId) {
-                editedContents.set(activeTabId, dom.editContent.value);
-            }
+            if (activeTabId && activeTabId !== tabId) snapshotActiveTab();
 
-            activeTabId = tabId;
             const tab = openTabs.find(t => t.id === tabId);
             if (!tab) return;
 
-            // 根据标签页状态设置编辑模式
-            isEditMode = !tab.isNew;
-            document.getElementById('edit-form-title').textContent = tab.isNew ? '新增博客' : '编辑文章';
-            document.getElementById('edit-group-group').style.display = tab.isNew ? 'block' : 'none';
-            document.getElementById('save-edit').textContent = tab.isNew ? '确认新增' : '保存修改';
+            activeTabId = tabId;
+            setEditFormMode(tab.isNew);
 
-            // 更新表单
-            dom.editTitle.value = tab.blog.title;
-            dom.editTags.value = tab.blog.tags.join(',');
-            dom.editContent.value = editedContents.get(tabId) || '';
+            dom.editTitle.value = tab.blog.title || '';
+            dom.editTags.value = (tab.blog.tags || []).join(',');
+            dom.editContent.value = editedContents.get(tabId) ?? '';
             currentEditFile = tab.blog;
 
-            // 更新标签高亮
             renderTabs();
-
-            // 初始化文件树和资源树
             renderFileTree();
-            renderResourceTree();
         }
 
         // 关闭标签
         function closeTab(tabId, event) {
             if (event) event.stopPropagation();
 
-            // 检查是否有未保存的更改
-            const currentContent = editedContents.get(tabId) || '';
-            const tab = openTabs.find(t => t.id === tabId);
+            // 当前标签的内容先落回状态，再判断是否真的脏
+            if (activeTabId === tabId) snapshotActiveTab();
 
-            // 如果有编辑且与原始内容不同，提示保存
-            if (tab && !tab.isNew && tab.blog.path) {
-                const originalContent = editedContents.get(tabId) || '';
-                if (currentContent !== originalContent) {
-                    if (!confirm('当前文件有未保存的更改，确定要关闭吗？')) {
-                        return;
-                    }
-                }
+            if (isTabDirty(tabId) && !confirm('当前文件有未保存的更改，确定要关闭吗？')) {
+                return;
             }
 
             // 删除标签
@@ -560,6 +706,8 @@
             if (index > -1) {
                 openTabs.splice(index, 1);
                 editedContents.delete(tabId);
+                originalContents.delete(tabId);
+                dirtyTabs.delete(tabId);
             }
 
             // 如果关闭的是当前标签，切换到另一个
@@ -574,6 +722,8 @@
                     dom.containers.edit.classList.remove('container-active');
                     dom.containers.list.classList.add('container-active');
                     dom.containers.list.classList.remove('container-hidden');
+                    // 回到列表时恢复左侧时间过滤器
+                    document.querySelector('.sidebar-left').style.display = 'block';
                 }
             }
 
@@ -586,10 +736,11 @@
 
             openTabs.forEach(tab => {
                 const tabEl = document.createElement('div');
+                const dirty = dirtyTabs.has(tab.id);
                 tabEl.className = 'edit-tab' + (tab.id === activeTabId ? ' active' : '');
                 tabEl.innerHTML = `
-                    <span class="edit-tab-title">${tab.title}</span>
-                    <span class="edit-tab-close" data-tab-id="${tab.id}">×</span>
+                    <span class="edit-tab-title">${dirty ? '<span class="edit-tab-dirty">●</span>' : ''}${escapeHtml(tab.title)}</span>
+                    <span class="edit-tab-close" data-tab-id="${escapeHtml(tab.id)}">×</span>
                 `;
 
                 tabEl.addEventListener('click', () => switchToTab(tab.id));
@@ -650,7 +801,7 @@
                     const folderEl = document.createElement('div');
                     folderEl.className = 'tree-item folder';
                     folderEl.dataset.folderPath = subPath;
-                    folderEl.innerHTML = `<i class="fa fa-folder-o"></i> <span class="folder-name">${folderName}</span>`;
+                    folderEl.innerHTML = `<i class="fa fa-folder-o"></i> <span class="folder-name">${escapeHtml(folderName)}</span>`;
                     folderEl.style.paddingLeft = `${level * 16 + 12}px`;
 
                     // 单击展开/收起文件夹
@@ -712,11 +863,11 @@
                     fileEl.style.display = 'none'; // 默认收起
                     fileEl.style.paddingLeft = `${level * 16 + 28}px`;
 
-                    if (currentEditFile && currentEditFile.title === fileInfo.blog.title) {
+                    if (currentEditFile && currentEditFile.path === fileInfo.blog.path) {
                         fileEl.classList.add('active');
                     }
 
-                    fileEl.innerHTML = `<i class="fa fa-file-text-o"></i> ${fileInfo.name}`;
+                    fileEl.innerHTML = `<i class="fa fa-file-text-o"></i> ${escapeHtml(fileInfo.name)}`;
 
                     // 单击打开文件
                     fileEl.addEventListener('click', () => {
@@ -778,559 +929,561 @@
             dom.ctxNewFolder.style.display = 'none';
         }
 
-        // 渲染资源树（直接显示 asserts 下的内容，支持多重文件夹结构）
-        async function renderResourceTree() {
-            console.log('开始渲染资源树...');
-            dom.resourceTree.innerHTML = '';
+        // ==================== 资源栏（asserts 目录） ====================
 
-            const token = safeGetStorage('github-token');
-            if (!token) {
-                console.log('未登录，跳过资源渲染');
-                dom.resourceTree.innerHTML = '<div style="padding: 1rem; color: #6b7280; font-size: 0.85rem;">请登录后查看资源</div>';
-                return;
-            }
+        const RESOURCE_ROOT = 'asserts';
+        let resourceTreeLoaded = false;
+        let resourceRemotePaths = []; // [{ path, type }]，一次递归取树后的缓存
 
-            try {
-                const octokit = new Octokit({ auth: token });
-                console.log('开始加载 asserts 目录...');
-
-                // 加载 asserts 目录内容
-                const { data: files } = await octokit.rest.repos.getContent({
-                    owner: config.owner,
-                    repo: config.repo,
-                    path: 'asserts',
-                    ref: config.branch
-                });
-
-                console.log('asserts 目录内容:', files);
-
-                if (!Array.isArray(files)) {
-                    console.log('返回的不是数组，可能是单个文件或错误');
-                    return;
-                }
-
-                if (files.length === 0) {
-                    dom.resourceTree.innerHTML = '<div style="padding: 1rem; color: #6b7280; font-size: 0.85rem;">资源目录为空</div>';
-                    return;
-                }
-
-                // 按文件夹/文件分类并排序（文件夹在前）
-                const folders = [];
-                const fileList = [];
-                files.forEach(file => {
-                    if (file.type === 'dir') {
-                        folders.push(file);
-                    } else {
-                        fileList.push(file);
-                    }
-                });
-                folders.sort((a, b) => a.name.localeCompare(b.name));
-                fileList.sort((a, b) => a.name.localeCompare(b.name));
-
-                console.log(`找到 ${folders.length} 个文件夹，${fileList.length} 个文件`);
-
-                // 渲染文件夹
-                folders.forEach(file => {
-                    renderResourceFolder(file, 'asserts');
-                });
-
-                // 渲染文件
-                fileList.forEach(file => {
-                    renderResourceFile(file, 'asserts');
-                });
-
-                console.log('资源树渲染完成');
-            } catch (error) {
-                console.log('加载资源文件夹内容失败:', error.message);
-                console.error('错误详情:', error);
-                dom.resourceTree.innerHTML = `<div style="padding: 1rem; color: #dc2626; font-size: 0.85rem;">加载失败: ${error.message}</div>`;
-            }
+        function encodeRepoPathLocal(path) {
+            return String(path || '').split('/').filter(Boolean).map(encodeURIComponent).join('/');
         }
 
-        // 渲染资源文件夹
-        function renderResourceFolder(file, parentPath) {
-            const folderPath = file.path;
-            const folderName = file.name;
-
-            const folderEl = document.createElement('div');
-            folderEl.className = 'tree-item folder';
-            folderEl.dataset.path = folderPath;
-            folderEl.dataset.parentPath = parentPath;
-            folderEl.dataset.type = 'folder';
-            folderEl.innerHTML = `<i class="fa fa-folder-o"></i> <span class="folder-name">${folderName}</span>`;
-
-            // 单击展开/收起文件夹
-            folderEl.addEventListener('click', (e) => {
-                e.stopPropagation();
-                const icon = folderEl.querySelector('i');
-                const isExpanded = folderEl.classList.contains('expanded');
-
-                if (isExpanded) {
-                    // 收起
-                    folderEl.classList.remove('expanded');
-                    icon.className = 'fa fa-folder-o';
-                    let next = folderEl.nextElementSibling;
-                    while (next && next.classList.contains('tree-item')) {
-                        if (next.dataset.parentPath === folderPath) {
-                            next.style.display = 'none';
-                        } else {
-                            break;
-                        }
-                        next = next.nextElementSibling;
-                    }
-                } else {
-                    // 展开
-                    folderEl.classList.add('expanded');
-                    icon.className = 'fa fa-folder-open-o';
-                    let next = folderEl.nextElementSibling;
-                    while (next && next.classList.contains('tree-item')) {
-                        if (next.dataset.parentPath === folderPath) {
-                            next.style.display = 'flex';
-                        } else {
-                            break;
-                        }
-                        next = next.nextElementSibling;
-                    }
-                    // 异步加载子文件夹内容
-                    loadResourceSubfolder(folderEl, folderPath);
-                }
-            });
-
-            // 右键菜单
-            folderEl.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                showResourceFolderContextMenu(e, folderPath);
-            });
-
-            dom.resourceTree.appendChild(folderEl);
-        }
-
-        // 渲染资源文件
-        function renderResourceFile(file, parentPath) {
-            const fileEl = document.createElement('div');
-            fileEl.className = 'tree-item file';
-            fileEl.dataset.path = file.path;
-            fileEl.dataset.parentPath = parentPath;
-            fileEl.dataset.fileName = file.name;
-            fileEl.dataset.downloadUrl = file.download_url;
-
-            const iconClass = getFileIcon(file.name);
-            fileEl.innerHTML = `<i class="fa ${iconClass}"></i> ${file.name}`;
-
-            // 右键菜单
-            fileEl.addEventListener('contextmenu', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                showResourceFileContextMenu(e, file.path, file.download_url);
-            });
-
-            dom.resourceTree.appendChild(fileEl);
-        }
-
-        // 加载资源子文件夹内容
-        async function loadResourceSubfolder(folderEl, folderPath) {
-            const token = safeGetStorage('github-token');
-            if (!token) return;
-
-            try {
-                const octokit = new Octokit({ auth: token });
-
-                const { data: files } = await octokit.rest.repos.getContent({
-                    owner: config.owner,
-                    repo: config.repo,
-                    path: folderPath,
-                    ref: config.branch
-                });
-
-                if (!Array.isArray(files)) return;
-
-                // 按文件夹/文件分类并排序
-                const folders = [];
-                const fileList = [];
-                files.forEach(file => {
-                    if (file.type === 'dir') {
-                        folders.push(file);
-                    } else {
-                        fileList.push(file);
-                    }
-                });
-                folders.sort((a, b) => a.name.localeCompare(b.name));
-                fileList.sort((a, b) => a.name.localeCompare(b.name));
-
-                // 找到插入位置（在当前文件夹后面）
-                let insertPos = folderEl;
-                while (insertPos.nextElementSibling && insertPos.nextElementSibling.dataset.parentPath === folderPath) {
-                    insertPos = insertPos.nextElementSibling;
-                }
-
-                // 渲染文件夹（默认隐藏）
-                folders.forEach(file => {
-                    const subFolderEl = document.createElement('div');
-                    subFolderEl.className = 'tree-item folder';
-                    subFolderEl.dataset.path = file.path;
-                    subFolderEl.dataset.parentPath = folderPath;
-                    subFolderEl.dataset.type = 'folder';
-                    subFolderEl.style.display = 'none';
-                    subFolderEl.innerHTML = `<i class="fa fa-folder-o"></i> <span class="folder-name">${file.name}</span>`;
-
-                    // 单击展开/收起
-                    subFolderEl.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        const icon = subFolderEl.querySelector('i');
-                        const isExpanded = subFolderEl.classList.contains('expanded');
-
-                        if (isExpanded) {
-                            subFolderEl.classList.remove('expanded');
-                            icon.className = 'fa fa-folder-o';
-                            let next = subFolderEl.nextElementSibling;
-                            while (next && next.classList.contains('tree-item')) {
-                                if (next.dataset.parentPath === file.path) {
-                                    next.style.display = 'none';
-                                } else {
-                                    break;
-                                }
-                                next = next.nextElementSibling;
-                            }
-                        } else {
-                            subFolderEl.classList.add('expanded');
-                            icon.className = 'fa fa-folder-open-o';
-                            let next = subFolderEl.nextElementSibling;
-                            while (next && next.classList.contains('tree-item')) {
-                                if (next.dataset.parentPath === file.path) {
-                                    next.style.display = 'flex';
-                                } else {
-                                    break;
-                                }
-                                next = next.nextElementSibling;
-                            }
-                            loadResourceSubfolder(subFolderEl, file.path);
-                        }
-                    });
-
-                    // 右键菜单
-                    subFolderEl.addEventListener('contextmenu', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        showResourceFolderContextMenu(e, file.path);
-                    });
-
-                    insertPos.parentNode.insertBefore(subFolderEl, insertPos.nextElementSibling);
-                    insertPos = subFolderEl;
-                });
-
-                // 渲染文件（默认隐藏）
-                fileList.forEach(file => {
-                    const subFileEl = document.createElement('div');
-                    subFileEl.className = 'tree-item file';
-                    subFileEl.dataset.path = file.path;
-                    subFileEl.dataset.parentPath = folderPath;
-                    subFileEl.dataset.fileName = file.name;
-                    subFileEl.dataset.downloadUrl = file.download_url;
-                    subFileEl.style.display = 'none';
-
-                    const iconClass = getFileIcon(file.name);
-                    subFileEl.innerHTML = `<i class="fa ${iconClass}"></i> ${file.name}`;
-
-                    // 右键菜单
-                    subFileEl.addEventListener('contextmenu', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        showResourceFileContextMenu(e, file.path, file.download_url);
-                    });
-
-                    insertPos.parentNode.insertBefore(subFileEl, insertPos.nextElementSibling);
-                    insertPos = subFileEl;
-                });
-            } catch (error) {
-                console.log('加载子文件夹失败:', error.message);
-            }
+        function rawResourceUrl(path) {
+            return `https://raw.githubusercontent.com/${config.owner}/${config.repo}/${config.branch}/${encodeRepoPathLocal(path)}`;
         }
 
         // 获取文件图标
         function getFileIcon(filename) {
-            const ext = filename.split('.').pop().toLowerCase();
+            const ext = String(filename || '').split('.').pop().toLowerCase();
             const iconMap = {
-                'png': 'fa-file-image-o',
-                'jpg': 'fa-file-image-o',
-                'jpeg': 'fa-file-image-o',
-                'gif': 'fa-file-image-o',
-                'svg': 'fa-file-image-o',
-                'pdf': 'fa-file-pdf-o',
-                'mp4': 'fa-file-video-o',
-                'mp3': 'fa-file-audio-o',
-                'zip': 'fa-file-zip-o',
-                'rar': 'fa-file-zip-o',
-                'txt': 'fa-file-text-o',
-                'md': 'fa-file-text-o',
-                'js': 'fa-file-code-o',
-                'html': 'fa-file-code-o',
-                'css': 'fa-file-code-o',
-                'json': 'fa-file-code-o'
+                png: 'fa-file-image-o', jpg: 'fa-file-image-o', jpeg: 'fa-file-image-o',
+                gif: 'fa-file-image-o', svg: 'fa-file-image-o', webp: 'fa-file-image-o',
+                pdf: 'fa-file-pdf-o', mp4: 'fa-file-video-o', mov: 'fa-file-video-o',
+                mp3: 'fa-file-audio-o', wav: 'fa-file-audio-o',
+                zip: 'fa-file-zip-o', rar: 'fa-file-zip-o', gz: 'fa-file-archive-o',
+                txt: 'fa-file-text-o', md: 'fa-file-text-o',
+                js: 'fa-file-code-o', ts: 'fa-file-code-o', json: 'fa-file-code-o',
+                html: 'fa-file-code-o', css: 'fa-file-code-o', py: 'fa-file-code-o'
             };
             return iconMap[ext] || 'fa-file-o';
         }
 
-        // 显示资源文件夹右键菜单
+        function pendingResourceCount() {
+            return pendingResourceFiles.size + pendingResourceFolders.size;
+        }
+
+        function updatePendingResourceBadge() {
+            if (!dom.resourceCommitBtn) return;
+            const count = pendingResourceCount();
+            dom.pendingResourceCount.textContent = count;
+            dom.resourceCommitBtn.disabled = count === 0;
+        }
+
+        // 取 asserts 目录下的全部路径（公开仓库匿名也能读；Token 失效时自动降级）
+        async function loadResourcePaths() {
+            const token = getGithubToken();
+            const repoInfo = { owner: config.owner, repo: config.repo, branch: config.branch };
+            const fetchPaths = async (auth) => {
+                const octokit = new Octokit(auth ? { auth } : {});
+                const items = await listRepoPaths(octokit, repoInfo, RESOURCE_ROOT);
+                return items.filter(item => item.path !== RESOURCE_ROOT);
+            };
+
+            try {
+                return await fetchPaths(token);
+            } catch (error) {
+                if (token && isAuthError(error)) {
+                    handleAuthFailure('GitHub Token 已失效（Bad credentials），资源栏已切换为匿名只读。');
+                    return await fetchPaths('');
+                }
+                throw error;
+            }
+        }
+
+        // 把远端路径 + 待提交项合成一棵树
+        function buildResourceTree(paths) {
+            const root = { name: '', path: '', folders: new Map(), files: [] };
+
+            const ensureFolder = (parent, name, path) => {
+                if (!parent.folders.has(name)) {
+                    parent.folders.set(name, { name, path, folders: new Map(), files: [] });
+                }
+                return parent.folders.get(name);
+            };
+
+            const addFile = (path, meta = {}) => {
+                const parts = path.split('/').filter(Boolean);
+                if (parts[0] !== RESOURCE_ROOT || parts.length < 2) return;
+                if (parts[parts.length - 1] === '.gitkeep') return;
+                let node = root;
+                for (let i = 1; i < parts.length - 1; i++) {
+                    node = ensureFolder(node, parts[i], parts.slice(0, i + 1).join('/'));
+                }
+                node.files.push(Object.assign({
+                    name: parts[parts.length - 1],
+                    path,
+                    parentPath: parts.slice(0, -1).join('/')
+                }, meta));
+            };
+
+            (paths || []).forEach(item => {
+                if (item.type === 'folder') {
+                    const parts = item.path.split('/').filter(Boolean);
+                    if (parts[0] !== RESOURCE_ROOT) return;
+                    let node = root;
+                    for (let i = 1; i < parts.length; i++) {
+                        node = ensureFolder(node, parts[i], parts.slice(0, i + 1).join('/'));
+                    }
+                } else {
+                    addFile(item.path, { pending: false });
+                }
+            });
+
+            // 待创建的文件夹
+            pendingResourceFolders.forEach((meta, path) => {
+                const parts = path.split('/').filter(Boolean);
+                if (parts[0] !== RESOURCE_ROOT) return;
+                let node = root;
+                for (let i = 1; i < parts.length; i++) {
+                    node = ensureFolder(node, parts[i], parts.slice(0, i + 1).join('/'));
+                }
+            });
+
+            // 待提交的文件
+            pendingResourceFiles.forEach((meta, path) => {
+                addFile(path, { pending: true });
+            });
+
+            return root;
+        }
+
+        function renderResourceNode(node, level = 0) {
+            const folders = Array.from(node.folders.values())
+                .sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+            const files = node.files.slice()
+                .sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+
+            folders.forEach(folder => {
+                const el = document.createElement('div');
+                el.className = 'tree-item folder expanded';
+                el.dataset.path = folder.path;
+                el.dataset.parentPath = folder.path.substring(0, folder.path.lastIndexOf('/'));
+                el.dataset.type = 'folder';
+                el.style.paddingLeft = `${level * 16 + 8}px`;
+                el.innerHTML = `<i class="fa fa-folder-open-o"></i> <span class="folder-name">${escapeHtml(folder.name)}</span>`;
+
+                el.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    toggleResourceFolder(el);
+                });
+                el.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showResourceFolderContextMenu(e, folder.path);
+                });
+
+                dom.resourceTree.appendChild(el);
+                renderResourceNode(folder, level + 1);
+            });
+
+            files.forEach(file => {
+                const el = document.createElement('div');
+                el.className = 'tree-item file' + (file.pending ? ' pending' : '');
+                el.dataset.path = file.path;
+                el.dataset.parentPath = file.parentPath;
+                el.dataset.fileName = file.name;
+                el.style.paddingLeft = `${level * 16 + 8}px`;
+                el.title = file.pending ? `${file.path}（待提交）` : file.path;
+                el.innerHTML = `<i class="fa ${getFileIcon(file.name)}"></i> ${escapeHtml(file.name)}`
+                    + (file.pending ? '<span class="pending-badge">待提交</span>' : '');
+
+                el.addEventListener('dblclick', () => {
+                    if (file.pending) {
+                        alert('该文件还未提交，提交后才能在线查看');
+                        return;
+                    }
+                    window.open(rawResourceUrl(file.path), '_blank');
+                });
+                el.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showResourceFileContextMenu(e, file.path, !!file.pending);
+                });
+
+                dom.resourceTree.appendChild(el);
+            });
+        }
+
+        // 折叠/展开文件夹（整棵子树一起处理）
+        function toggleResourceFolder(folderEl) {
+            const path = folderEl.dataset.path;
+            const expanded = folderEl.classList.contains('expanded');
+            const icon = folderEl.querySelector('i');
+            if (expanded) {
+                folderEl.classList.remove('expanded');
+                icon.className = 'fa fa-folder-o';
+            } else {
+                folderEl.classList.add('expanded');
+                icon.className = 'fa fa-folder-open-o';
+            }
+            syncResourceVisibility();
+        }
+
+        // 依据各级文件夹的展开状态，统一计算可见性（也用于清空搜索后恢复）
+        function syncResourceVisibility() {
+            const items = Array.from(dom.resourceTree.querySelectorAll('.tree-item'));
+            let collapsedPaths = [];
+
+            items.forEach(el => {
+                const path = el.dataset.path || '';
+                collapsedPaths = collapsedPaths.filter(p => path === p || path.startsWith(p + '/'));
+                const hiddenByAncestor = collapsedPaths.length > 0;
+                el.style.display = hiddenByAncestor ? 'none' : 'flex';
+                if (el.classList.contains('folder') && !el.classList.contains('expanded')) {
+                    collapsedPaths.push(path);
+                }
+            });
+
+            dom.resourceSearchClear.style.display =
+                (dom.resourceSearchInput.value || '').trim() ? 'block' : 'none';
+        }
+
+        function renderResourceTreeFromCache() {
+            const tree = buildResourceTree(resourceRemotePaths);
+            dom.resourceTree.innerHTML = '';
+            renderResourceNode(tree);
+            syncResourceVisibility();
+            updatePendingResourceBadge();
+        }
+
+        // 渲染资源树
+        async function renderResourceTree() {
+            updatePendingResourceBadge();
+
+            const token = getGithubToken();
+            dom.resourceTree.innerHTML = '<div class="resource-loading"><i class="fa fa-spinner fa-spin"></i> 加载资源...</div>';
+
+            try {
+                resourceRemotePaths = (await loadResourcePaths()) || [];
+                if (!token) {
+                    // 匿名只读提示，放在树下方由 CSS 处理（不占树结构）
+                    dom.resourceTree.dataset.anonymous = '1';
+                } else {
+                    delete dom.resourceTree.dataset.anonymous;
+                }
+                if (resourceRemotePaths.length === 0 && pendingResourceCount() === 0) {
+                    resourceTreeLoaded = true;
+                    dom.resourceTree.innerHTML = '<div class="resource-empty">资源目录为空</div>';
+                    return;
+                }
+                resourceTreeLoaded = true;
+                renderResourceTreeFromCache();
+            } catch (error) {
+                console.error('加载资源目录失败:', error);
+                resourceTreeLoaded = false;
+                dom.resourceTree.innerHTML = `<div class="resource-empty error">加载失败: ${escapeHtml(error.message)}</div>`;
+            }
+        }
+
+        async function refreshResourceTree() {
+            resourceTreeLoaded = false;
+            await renderResourceTree();
+        }
+
+        // 复制路径（带兜底，避免非安全上下文下 clipboard 不可用）
+        function copyText(text) {
+            const fallback = () => {
+                try {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    textarea.remove();
+                } catch (e) {
+                    alert(`复制失败，请手动复制：${text}`);
+                }
+            };
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).catch(fallback);
+            } else {
+                fallback();
+            }
+        }
+
         function showResourceFolderContextMenu(e, folderPath) {
             dom.resourceContextMenu.style.display = 'block';
             dom.resourceContextMenu.style.left = e.pageX + 'px';
             dom.resourceContextMenu.style.top = e.pageY + 'px';
             dom.resourceContextMenu.dataset.folderPath = folderPath;
-            dom.resourceContextMenu.dataset.itemType = 'folder';
 
-            // 显示所有选项
             dom.resCopyPath.style.display = 'flex';
             dom.resUploadFile.style.display = 'flex';
             dom.resNewFolder.style.display = 'flex';
             dom.resDeleteFolder.style.display = 'flex';
             dom.resDeleteFile.style.display = 'none';
 
-            // 复制路径（路径前加/）
             dom.resCopyPath.onclick = () => {
-                navigator.clipboard.writeText(`/${folderPath}`);
+                copyText('/' + folderPath);
                 dom.resourceContextMenu.style.display = 'none';
             };
 
-            // 上传资源文件
             dom.resUploadFile.onclick = () => {
                 const input = document.createElement('input');
                 input.type = 'file';
-                input.accept = '*/*';
-                input.onchange = (e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                        cacheAndUploadResourceFile(file, folderPath);
-                    }
+                input.onchange = (event) => {
+                    const file = event.target.files[0];
+                    if (file) queueResourceFile(file, folderPath);
                 };
                 input.click();
                 dom.resourceContextMenu.style.display = 'none';
             };
 
-            // 新增文件夹（缓存，不直接commit）
             dom.resNewFolder.onclick = () => {
-                const folderName = prompt('请输入文件夹名称：');
-                if (folderName && folderName.trim()) {
-                    cacheResourceFolder(folderName.trim(), folderPath);
-                }
+                const rawName = prompt('请输入文件夹名称：');
                 dom.resourceContextMenu.style.display = 'none';
+                if (rawName && rawName.trim()) queueResourceFolder(folderPath, rawName.trim());
             };
 
-            // 删除文件夹（缓存，检查是否有下属文件）
             dom.resDeleteFolder.onclick = () => {
-                deleteResourceFolder(folderPath);
                 dom.resourceContextMenu.style.display = 'none';
+                deleteResourceFolder(folderPath);
             };
         }
 
-        // 显示资源文件右键菜单
-        function showResourceFileContextMenu(e, filePath, downloadUrl = null) {
+        function showResourceFileContextMenu(e, filePath, isPending) {
             dom.resourceContextMenu.style.display = 'block';
             dom.resourceContextMenu.style.left = e.pageX + 'px';
             dom.resourceContextMenu.style.top = e.pageY + 'px';
             dom.resourceContextMenu.dataset.filePath = filePath;
-            dom.resourceContextMenu.dataset.downloadUrl = downloadUrl;
-            dom.resourceContextMenu.dataset.itemType = 'file';
 
-            // 显示选项
             dom.resCopyPath.style.display = 'flex';
             dom.resUploadFile.style.display = 'none';
             dom.resNewFolder.style.display = 'none';
             dom.resDeleteFolder.style.display = 'none';
+            dom.resDeleteFile.style.display = 'flex';
 
-            // 判断是否是缓存中的文件（可以删除）
-            const isCachedFile = pendingResourceFiles.has(filePath);
-            dom.resDeleteFile.style.display = isCachedFile ? 'flex' : 'none';
-
-            // 复制路径（路径前加/）
             dom.resCopyPath.onclick = () => {
-                navigator.clipboard.writeText(`/${filePath}`);
+                copyText('/' + filePath);
                 dom.resourceContextMenu.style.display = 'none';
             };
 
-            // 删除文件（仅缓存文件）
             dom.resDeleteFile.onclick = () => {
-                if (confirm('确定要删除这个文件吗？')) {
-                    deleteResourceFile(filePath);
-                }
                 dom.resourceContextMenu.style.display = 'none';
+                deleteResourceFile(filePath, isPending);
             };
         }
 
-        // 缓存并上传资源文件
-        async function cacheAndUploadResourceFile(file, folderPath) {
-            const token = safeGetStorage('github-token');
-            if (!token) {
+        // 加入待提交队列（真正提交由“提交资源”按钮或保存文章时触发）
+        async function queueResourceFile(file, folderPath) {
+            if (!getGithubToken()) {
                 alert('请先登录');
                 return;
             }
 
+            const filePath = `${folderPath}/${file.name}`;
             try {
-                const filePath = `${folderPath}/${file.name}`;
+                if (file.size > 5 * 1024 * 1024) {
+                    const ok = confirm(`文件较大（${(file.size / 1024 / 1024).toFixed(1)}MB），提交可能较慢，继续吗？`);
+                    if (!ok) return;
+                }
+                const exists = resourceRemotePaths.some(item => item.path === filePath)
+                    || pendingResourceFiles.has(filePath);
+                if (exists && !confirm(`资源已存在：${filePath}，要覆盖吗？`)) return;
+
                 const content = await readFileAsBase64(file);
-
-                // 添加到缓存
-                pendingResourceFiles.set(filePath, { file, content, folderPath });
-
-                // 添加到文件夹缓存
-                if (!resourceFolderCache.has(folderPath)) {
-                    resourceFolderCache.set(folderPath, []);
-                }
-                const items = resourceFolderCache.get(folderPath);
-                if (!items.find(item => item.path === filePath)) {
-                    items.push({ name: file.name, path: filePath, type: 'file' });
-                }
-
-                alert('文件已缓存，将在提交时一起上传！');
-                renderResourceTree();
+                pendingResourceFiles.set(filePath, { name: file.name, content, folderPath });
+                renderResourceTreeFromCache();
             } catch (error) {
-                console.error('缓存文件失败:', error);
-                alert(`缓存文件失败: ${error.message}`);
+                console.error('读取资源文件失败:', error);
+                alert(`读取文件失败: ${error.message}`);
             }
         }
 
-        // 缓存资源文件夹（不直接commit）
-        function cacheResourceFolder(folderName, parentPath) {
+        function queueResourceFolder(parentPath, folderName) {
+            if (folderName.includes('/') || folderName.includes('\\')) {
+                alert('文件夹名不能包含斜杠');
+                return;
+            }
             const folderPath = `${parentPath}/${folderName}`;
-
-            // 添加到缓存
-            if (!resourceFolderCache.has(parentPath)) {
-                resourceFolderCache.set(parentPath, []);
+            if (resourceRemotePaths.some(item => item.path === folderPath)) {
+                alert('该文件夹已存在');
+                return;
             }
-            const items = resourceFolderCache.get(parentPath);
-            if (!items.find(item => item.path === folderPath)) {
-                items.push({ name: folderName, path: folderPath, type: 'folder' });
-            }
-
-            // 初始化空文件夹缓存
-            if (!resourceFolderCache.has(folderPath)) {
-                resourceFolderCache.set(folderPath, []);
-            }
-
-            alert('文件夹已缓存，将在提交时一起创建！');
-            renderResourceTree();
+            pendingResourceFolders.set(folderPath, { name: folderName });
+            renderResourceTreeFromCache();
         }
 
-        // 删除资源文件夹（检查是否有下属缓存文件）
-        function deleteResourceFolder(folderPath) {
-            // 检查是否有下属文件（缓存中）
-            const hasCachedFiles = Array.from(pendingResourceFiles.keys()).some(path =>
-                path.startsWith(folderPath + '/')
-            );
+        // 删除资源文件（远端立即提交，待提交的只移除队列）
+        async function deleteResourceFile(filePath, isPending) {
+            const name = filePath.split('/').pop();
 
-            if (hasCachedFiles) {
-                alert('无法删除：该文件夹下有待提交的文件，请先处理这些文件。');
+            if (isPending || pendingResourceFiles.has(filePath)) {
+                pendingResourceFiles.delete(filePath);
+                renderResourceTreeFromCache();
                 return;
             }
 
-            // 从缓存中删除
-            resourceFolderCache.delete(folderPath);
-
-            // 从父文件夹缓存中删除
-            for (const [parentPath, items] of resourceFolderCache.entries()) {
-                const index = items.findIndex(item => item.path === folderPath);
-                if (index !== -1) {
-                    items.splice(index, 1);
-                    break;
-                }
-            }
-
-            alert('文件夹已从缓存中删除！');
-            renderResourceTree();
-        }
-
-        // 删除资源文件
-        function deleteResourceFile(filePath) {
-            // 从缓存中删除
-            pendingResourceFiles.delete(filePath);
-
-            // 从文件夹缓存中删除
-            for (const [folderPath, items] of resourceFolderCache.entries()) {
-                const index = items.findIndex(item => item.path === filePath);
-                if (index !== -1) {
-                    items.splice(index, 1);
-                    break;
-                }
-            }
-
-            alert('文件已从缓存中删除！');
-            renderResourceTree();
-        }
-
-        // 资源搜索功能
-        function filterResourceItems(searchTerm) {
-            const items = dom.resourceTree.querySelectorAll('.tree-item');
-            const term = searchTerm.toLowerCase().trim();
-
-            items.forEach(item => {
-                if (item.classList.contains('folder')) {
-                    // 文件夹：如果搜索词为空或匹配文件夹名称，显示文件夹
-                    const folderName = item.querySelector('.folder-name')?.textContent || '';
-                    const shouldShow = term === '' || folderName.toLowerCase().includes(term);
-                    item.style.display = shouldShow ? 'flex' : 'none';
-                } else {
-                    // 文件：如果搜索词为空或匹配文件名，显示文件
-                    const fileName = item.dataset.fileName || item.textContent.trim();
-                    const shouldShow = term === '' || fileName.toLowerCase().includes(term);
-                    item.style.display = shouldShow ? 'flex' : 'none';
-                }
-            });
-
-            // 显示/隐藏清除按钮
-            dom.resourceSearchClear.style.display = term ? 'block' : 'none';
-        }
-
-        // 上传所有缓存的资源文件
-        async function uploadAllPendingResources() {
-            const token = safeGetStorage('github-token');
+            const token = getGithubToken();
             if (!token) {
                 alert('请先登录');
-                return false;
+                return;
             }
-
-            if (pendingResourceFiles.size === 0) {
-                return true;
-            }
+            if (!confirm(`确定删除资源文件 ${filePath} 吗？此操作会直接提交到仓库。`)) return;
 
             try {
                 const octokit = new Octokit({ auth: token });
-
-                // 上传所有缓存文件
-                for (const [filePath, data] of pendingResourceFiles.entries()) {
-                    await octokit.rest.repos.createOrUpdateFileContents({
-                        owner: config.owner,
-                        repo: config.repo,
-                        path: filePath,
-                        message: `上传资源文件: ${data.file.name}`,
-                        content: data.content,
-                        branch: config.branch
-                    });
-                }
-
-                // 清空缓存
-                pendingResourceFiles.clear();
-
-                alert('所有缓存资源文件已上传！');
-                return true;
+                const result = await deleteRepoFiles(
+                    { octokit, owner: config.owner, repo: config.repo, branch: config.branch },
+                    [filePath],
+                    `删除资源文件: ${name}`
+                );
+                if (!result.success) throw new Error(result.error);
+                resourceRemotePaths = resourceRemotePaths.filter(item => item.path !== filePath);
+                renderResourceTreeFromCache();
             } catch (error) {
-                console.error('上传缓存文件失败:', error);
-                alert(`上传缓存文件失败: ${error.message}`);
-                return false;
+                console.error('删除资源文件失败:', error);
+                alert(`删除失败: ${error.message}`);
             }
         }
 
-        // 读取文件为Base64
-        function readFileAsBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => {
-                    // 移除data:xxx;base64,前缀
-                    const base64 = reader.result.split(',')[1];
-                    resolve(base64);
-                };
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
+        // 删除资源文件夹（连同其下文件一起提交删除）
+        async function deleteResourceFolder(folderPath) {
+            const token = getGithubToken();
+            if (!token) {
+                alert('请先登录');
+                return;
+            }
+
+            const remoteFiles = resourceRemotePaths
+                .filter(item => item.type === 'file' && item.path.startsWith(folderPath + '/'))
+                .map(item => item.path);
+            const pendingFiles = Array.from(pendingResourceFiles.keys())
+                .filter(path => path.startsWith(folderPath + '/'));
+            const pendingFolders = Array.from(pendingResourceFolders.keys())
+                .filter(path => path === folderPath || path.startsWith(folderPath + '/'));
+
+            if (remoteFiles.length === 0 && pendingFiles.length === 0 && pendingFolders.length === 0) {
+                // 只是空文件夹，直接移除
+                pendingResourceFolders.delete(folderPath);
+                renderResourceTreeFromCache();
+                return;
+            }
+
+            const ok = confirm(`确定删除文件夹 ${folderPath} 吗？\n其中 ${remoteFiles.length} 个文件会被提交删除，${pendingFiles.length} 个待提交文件会被丢弃。`);
+            if (!ok) return;
+
+            try {
+                if (remoteFiles.length > 0) {
+                    const octokit = new Octokit({ auth: token });
+                    const result = await deleteRepoFiles(
+                        { octokit, owner: config.owner, repo: config.repo, branch: config.branch },
+                        remoteFiles,
+                        `删除资源文件夹: ${folderPath}`
+                     );
+                    if (!result.success) throw new Error(result.error);
+                }
+
+                pendingFiles.forEach(path => pendingResourceFiles.delete(path));
+                pendingFolders.forEach(path => pendingResourceFolders.delete(path));
+                resourceRemotePaths = resourceRemotePaths.filter(item => !item.path.startsWith(folderPath + '/'));
+                renderResourceTreeFromCache();
+            } catch (error) {
+                console.error('删除资源文件夹失败:', error);
+                alert(`删除失败: ${error.message}`);
+            }
+        }
+
+        // 把待提交资源追加进一个批次（保存文章时一起提交）
+        function appendPendingResources(batch) {
+            let count = 0;
+            pendingResourceFiles.forEach((meta, path) => {
+                batch.addBinary(path, meta.content);
+                count += 1;
             });
+            pendingResourceFolders.forEach((meta, path) => {
+                const hasContent = Array.from(pendingResourceFiles.keys()).some(p => p.startsWith(path + '/'))
+                    || resourceRemotePaths.some(item => item.path.startsWith(path + '/'));
+                if (!hasContent) {
+                    // Git 不能存空目录，用 .gitkeep 占位
+                    batch.add(`${path}/.gitkeep`, '');
+                }
+            });
+            return count;
+        }
+
+        async function commitPendingResources() {
+            if (pendingResourceCount() === 0) return { success: true };
+
+            const token = getGithubToken();
+            if (!token) {
+                alert('请先登录');
+                return { success: false, error: '未登录' };
+            }
+
+            const octokit = new Octokit({ auth: token });
+            const batch = new CommitBatch({
+                octokit,
+                owner: config.owner,
+                repo: config.repo,
+                branch: config.branch
+            });
+
+            const fileCount = appendPendingResources(batch);
+            dom.resourceCommitBtn.disabled = true;
+            dom.resourceCommitBtn.textContent = '提交中...';
+
+            try {
+                const result = await batch.commit(`提交资源: ${fileCount} 个文件`);
+                if (!result.success) throw new Error(result.error);
+                pendingResourceFiles.clear();
+                pendingResourceFolders.clear();
+                await refreshResourceTree();
+                alert('资源已提交');
+                return result;
+            } catch (error) {
+                console.error('提交资源失败:', error);
+                alert(`提交资源失败: ${error.message}`);
+                return { success: false, error: error.message };
+            } finally {
+                dom.resourceCommitBtn.innerHTML =
+                    `<i class="fa fa-cloud-upload"></i> 提交资源 (<span id="pending-resource-count">0</span>)`;
+                dom.pendingResourceCount = document.getElementById('pending-resource-count');
+                updatePendingResourceBadge();
+            }
+        }
+
+        // 资源搜索
+        function filterResourceItems(searchTerm) {
+            const term = (searchTerm || '').toLowerCase().trim();
+            if (!term) {
+                syncResourceVisibility();
+                return;
+            }
+
+            const items = Array.from(dom.resourceTree.querySelectorAll('.tree-item'));
+            const matched = new Set();
+            const neededFolders = new Set();
+
+            items.forEach(el => {
+                const isFolder = el.classList.contains('folder');
+                const name = (isFolder
+                    ? (el.querySelector('.folder-name')?.textContent || '')
+                    : (el.dataset.fileName || '')).toLowerCase();
+                if (name.includes(term)) {
+                    if (isFolder) {
+                        neededFolders.add(el.dataset.path);
+                    } else {
+                        matched.add(el);
+                        let parent = el.dataset.parentPath;
+                        while (parent) {
+                            neededFolders.add(parent);
+                            parent = parent.substring(0, parent.lastIndexOf('/'));
+                        }
+                    }
+                }
+            });
+
+            items.forEach(el => {
+                const show = matched.has(el)
+                    || (el.classList.contains('folder') && neededFolders.has(el.dataset.path));
+                el.style.display = show ? 'flex' : 'none';
+            });
+
+            dom.resourceSearchClear.style.display = 'block';
         }
 
         // 隐藏右键菜单
@@ -1362,13 +1515,13 @@
         document.addEventListener('DOMContentLoaded', async () => {
             try {
                 await loadBlogSettings();
-                checkLoginStatus();
+                await checkLoginStatus();
                 await initBlog();
 
                 const params = getUrlParams();
-                if (params.opera === 'blog-show' && params.blog) {
+                if (params.opera === 'blog-show' && (params.blog || params.uuid)) {
                     // 如果URL参数指定了博客，进入博客详情页
-                    await showBlogByTitle(params.blog);
+                    await showBlogByIdentity({ title: params.blog, uuid: params.uuid });
                 }
 
                 bindEvents();
@@ -1378,32 +1531,60 @@
             }
         });
 
-        // 根据标题显示博客
-        async function showBlogByTitle(blogTitle) {
-            const blogInfo = allBlogs.find(b => b.title === blogTitle);
+        // 根据标题/uuid 显示博客
+        async function showBlogByIdentity(identity = {}) {
+            const blogInfo = identity.uuid
+                ? allBlogs.find(b => String(b.uuid) === String(identity.uuid))
+                : allBlogs.find(b => b.title === identity.title);
+
             if (!blogInfo) {
-                console.error('找不到博客:', blogTitle);
+                console.error('找不到博客:', identity);
                 return;
             }
 
             currentBlog = blogInfo;
             switchToShow(blogInfo, dom);
             loadBlogContent(blogInfo, dom, renderMarkdown);
+            loadCommitInfo(blogInfo);
+        }
 
-            // 获取并显示提交信息
-            const commitResponse = await fetch(`https://api.github.com/repos/${config.owner}/${config.repo}/commits?path=${blogInfo.path.split('/').map(s => encodeURIComponent(s)).join('/')}&ref=${config.branch}&per_page=1`);
-            if (commitResponse.ok) {
-                const commits = await commitResponse.json();
+        // 获取并展示某个文章的最新提交信息
+        async function loadCommitInfo(blogInfo) {
+            if (!blogInfo || !blogInfo.path) return;
+
+            const token = getGithubToken();
+            const url = `https://api.github.com/repos/${config.owner}/${config.repo}/commits?path=${encodePath(blogInfo.path)}&ref=${encodeURIComponent(config.branch)}&per_page=1`;
+            const read = async (auth) => {
+                const response = await fetch(url, { headers: auth ? { Authorization: `token ${auth}` } : {} });
+                if (response.status === 401) {
+                    const error = new Error('Bad credentials');
+                    error.status = 401;
+                    throw error;
+                }
+                if (!response.ok) throw new Error(`获取提交信息失败: ${response.status}`);
+                return response.json();
+            };
+
+            try {
+                let commits;
+                try {
+                    commits = await read(token);
+                } catch (error) {
+                    if (!token || !isAuthError(error)) return;
+                    handleAuthFailure('GitHub Token 已失效（Bad credentials），已切换为匿名读取。');
+                    commits = await read('');
+                }
                 if (commits && commits.length > 0) {
                     const commit = commits[0];
-                    const commitInfo = {
+                    displayCommitInfo({
                         author: commit.commit.committer.name || commit.author?.login || '未知',
                         date: new Date(commit.commit.committer.date),
                         message: commit.commit.message,
                         sha: commit.sha.substring(0, 7)
-                    };
-                    displayCommitInfo(commitInfo, config.owner, config.repo, commit.sha);
+                    }, config.owner, config.repo, commit.sha);
                 }
+            } catch (error) {
+                console.warn('获取提交信息失败:', error);
             }
         }
 
@@ -1423,7 +1604,7 @@
         // 加载博客配置
         async function loadBlogSettings() {
             try {
-                const response = await fetch('blog-config.json');
+                const response = await fetch(`blog-config.json?t=${Date.now()}`, { cache: 'no-store' });
                 if (!response.ok) throw new Error('配置文件加载失败');
                 const config = await response.json();
 
@@ -1453,7 +1634,7 @@
         // 初始化博客内容
         async function initBlog() {
             try {
-                const response = await fetch('blog-config.json');
+                const response = await fetch(`blog-config.json?t=${Date.now()}`, { cache: 'no-store' });
                 if (!response.ok) throw new Error('配置文件加载失败');
                 
                 const blogConfig = await response.json();
@@ -1501,10 +1682,79 @@
             loadCommitsAsync();
         }
 
+        // 提交信息本地缓存（GitHub API 限流/断网时仍能显示时间筛选）
+        const COMMIT_CACHE_KEY = 'blog-commit-cache-v1';
+        const COMMIT_CACHE_TTL = 30 * 60 * 1000;
+        let commitLoadFailed = false;
+
+        function readCommitCache() {
+            try {
+                const data = JSON.parse(localStorage.getItem(COMMIT_CACHE_KEY) || 'null');
+                if (!data || !data.entries || !data.ts) return null;
+                return data;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function writeCommitCache() {
+            try {
+                const entries = {};
+                globalCommitMap.forEach((info, path) => {
+                    entries[path] = {
+                        sha: info.sha,
+                        date: info.date.toISOString(),
+                        author: info.author,
+                        message: info.message
+                    };
+                });
+                localStorage.setItem(COMMIT_CACHE_KEY, JSON.stringify({ ts: Date.now(), entries }));
+            } catch (e) {
+                console.warn('写入提交缓存失败:', e);
+            }
+        }
+
+        function applyCommitInfo(path, info) {
+            globalCommitMap.set(path, info);
+            const blog = allBlogs.find(b => b.path === path);
+            if (blog) {
+                blog.lastModified = info.date;
+                blog.committer = info.author;
+                blog.commitMessage = info.message;
+            }
+        }
+
+        function applyCommitCache() {
+            const cache = readCommitCache();
+            if (!cache) return false;
+            let applied = 0;
+            Object.entries(cache.entries).forEach(([path, info]) => {
+                if (!globalCommitMap.has(path)) {
+                    applyCommitInfo(path, {
+                        sha: info.sha,
+                        date: new Date(info.date),
+                        author: info.author,
+                        message: info.message
+                    });
+                    applied += 1;
+                }
+            });
+            return applied > 0;
+        }
+
         // 异步加载commit信息
         async function loadCommitsAsync() {
             const filePaths = allBlogs.map(blog => blog.path);
             const totalFiles = filePaths.length;
+            commitLoadFailed = false;
+
+            // 先用缓存渲染一次，网络慢或限流时时间筛选也能用
+            if (applyCommitCache()) {
+                renderMonthList();
+                renderBlogs();
+            }
+
+            if (totalFiles === 0) return;
 
             // 显示加载状态
             const loadingIndicator = document.createElement('div');
@@ -1516,45 +1766,49 @@
             loadingIndicator.style.fontSize = '0.9rem';
             dom.blogContainer.insertBefore(loadingIndicator, dom.blogContainer.firstChild);
 
-            const batchResults = await batchGetFileCommits(
-                config.owner,
-                config.repo,
-                filePaths,
-                config.branch,
-                dom.githubTokenInput?.value.trim() || null,
-                100,
-                (processed) => {
-                    const indicator = document.getElementById('commit-loading');
-                    if (indicator) {
-                        indicator.innerHTML = `<small><i class="fa fa-spinner fa-spin"></i> 正在加载提交信息... (${processed}/${totalFiles})</small>`;
+            let batchResults = [];
+            try {
+                batchResults = await batchGetFileCommits(
+                    config.owner,
+                    config.repo,
+                    filePaths,
+                    config.branch,
+                    getGithubToken(),
+                    100,
+                    (processed) => {
+                        const indicator = document.getElementById('commit-loading');
+                        if (indicator) {
+                            indicator.innerHTML = `<small><i class="fa fa-spinner fa-spin"></i> 正在加载提交信息... (${processed}/${totalFiles})</small>`;
+                        }
                     }
-                }
-            );
-
-            console.log('batchResults:', batchResults);
+                );
+            } catch (error) {
+                console.warn('批量获取提交信息失败:', error);
+                commitLoadFailed = true;
+            }
 
             // 处理commit结果
-            batchResults.forEach(item => {
+            let successCount = 0;
+            (batchResults || []).forEach(item => {
                 if (!item.error && item.commits.length > 0) {
                     const commit = item.commits[0];
-                    // 存储到全局commit缓存
-                    globalCommitMap.set(item.path, {
+                    applyCommitInfo(item.path, {
                         sha: commit.sha,
                         date: new Date(commit.commit.committer.date),
                         author: commit.commit.committer.name || commit.author?.login || '未知',
                         message: commit.commit.message.split('\n')[0]
                     });
-
-                    const blog = allBlogs.find(b => b.path === item.path);
-                    if (blog) {
-                        blog.lastModified = globalCommitMap.get(item.path).date;
-                        blog.committer = globalCommitMap.get(item.path).author;
-                        blog.commitMessage = globalCommitMap.get(item.path).message;
-                    }
+                    successCount += 1;
                 } else {
                     console.warn('获取commit失败:', item.path, item.error);
                 }
             });
+
+            if (successCount > 0) {
+                writeCommitCache();
+            } else {
+                commitLoadFailed = true;
+            }
 
             // 移除加载指示器，重新渲染
             const indicator = document.getElementById('commit-loading');
@@ -1564,6 +1818,21 @@
             renderTags();
             renderMonthList();
             renderBlogs();
+            updateCommitFailureHint();
+        }
+
+        function updateCommitFailureHint() {
+            const el = document.getElementById('commit-failure-hint');
+            if (!commitLoadFailed || globalCommitMap.size > 0) {
+                if (el) el.remove();
+                return;
+            }
+            if (el) return;
+            const hint = document.createElement('div');
+            hint.id = 'commit-failure-hint';
+            hint.style.cssText = 'padding:8px 10px;margin:6px 0;border-radius:6px;background:#fef3c7;color:#92400e;font-size:12px;';
+            hint.textContent = '提交信息暂时无法获取（GitHub API 限流或网络异常），时间筛选不可用；博客列表仍可正常浏览。';
+            dom.blogContainer.insertBefore(hint, dom.blogContainer.firstChild);
         }
 
         // 渲染标签云
@@ -1576,7 +1845,7 @@
             allTagEl.className = 'tag active';
             allTagEl.textContent = '全部';
             allTagEl.addEventListener('click', () => {
-                document.querySelectorAll('.tag').forEach(tag => tag.classList.remove('active'));
+                dom.tagsContainer.querySelectorAll('.tag').forEach(tag => tag.classList.remove('active'));
                 allTagEl.classList.add('active');
                 currentFilterTag = null;
                 renderBlogs();
@@ -1589,11 +1858,11 @@
                 tagEl.textContent = tag;
                 if (currentFilterTag === tag) {
                     tagEl.classList.add('active');
-                    document.querySelectorAll('.tag')[0].classList.remove('active');
+                    allTagEl.classList.remove('active');
                 }
 
                 tagEl.addEventListener('click', () => {
-                    document.querySelectorAll('.tag').forEach(t => t.classList.remove('active'));
+                    dom.tagsContainer.querySelectorAll('.tag').forEach(t => t.classList.remove('active'));
                     tagEl.classList.add('active');
                     currentFilterTag = tag;
                     renderBlogs();
@@ -1708,7 +1977,9 @@
             dom.monthList.innerHTML = '';
 
             if (sortedMonths.length === 0) {
-                dom.monthList.innerHTML = '<div style="color: #9ca3af; font-size: 0.9rem; padding: 0.5rem;">暂无数据（请检查GitHub API是否正常）</div>';
+                dom.monthList.innerHTML = commitLoadFailed
+                    ? '<div style="color: #9ca3af; font-size: 0.9rem; padding: 0.5rem;">提交信息获取失败，时间筛选暂不可用</div>'
+                    : '<div style="color: #9ca3af; font-size: 0.9rem; padding: 0.5rem;">暂无数据</div>';
                 return;
             }
 
@@ -1845,51 +2116,87 @@
 
             card.appendChild(cardFooter);
 
-            // 点击卡片进入查看模式
+            // 点击卡片进入查看模式（uuid 为主，title 兼容旧链接）
             card.addEventListener('click', () => {
-                window.location.href = `?opera=blog-show&blog=${encodeURIComponent(article.title)}`;
+                const params = new URLSearchParams({ opera: 'blog-show' });
+                if (article.uuid || article.blog_uuid) {
+                    params.set('uuid', String(article.uuid ?? article.blog_uuid));
+                } else {
+                    params.set('blog', article.title);
+                }
+                window.location.href = `?${params.toString()}`;
             });
 
             return card;
         }
 
-        // 检查登录状态
-        function checkLoginStatus() {
-            const token = safeGetStorage('github-token');
-            if (token) {
+        // 检查登录状态：先拿 Token 校验一次，失效则自动降级为匿名浏览
+        async function checkLoginStatus() {
+            const token = getGithubToken();
+            if (!token) {
+                applyLoggedOutUI();
+                return false;
+            }
+            try {
+                const user = await getUserInfo(token);
                 dom.githubTokenInput.value = token;
-                updateLoginState(true);
+                applyLoggedInUI(user);
+                return true;
+            } catch (err) {
+                if (isAuthError(err)) {
+                    handleAuthFailure('本地保存的 GitHub Token 已失效（Bad credentials），已切换为匿名浏览；保存/上传请重新登录。');
+                } else {
+                    console.warn('校验 Token 失败:', err);
+                }
+                return false;
             }
         }
 
+        function applyLoggedInUI(user) {
+            dom.loginItem.style.display = 'none';
+            dom.loginForm.style.display = 'none';
+            dom.logoutItem.classList.remove('disabled');
+            dom.refreshItem.classList.remove('disabled');
+            dom.apiStatusItem.classList.remove('disabled');
+            if (user) {
+                dom.usernameDisplay.textContent = user.login;
+                dom.usernameDisplay.style.display = 'inline';
+                dom.avatarImg.src = user.avatar_url;
+                dom.avatarImg.style.display = 'block';
+                dom.defaultAvatar.style.display = 'none';
+            }
+        }
+
+        function applyLoggedOutUI() {
+            dom.githubTokenInput.value = '';
+            dom.loginItem.style.display = 'flex';
+            dom.logoutItem.classList.add('disabled');
+            dom.refreshItem.classList.add('disabled');
+            dom.apiStatusItem.classList.remove('disabled'); // 未登录也能查询匿名限额
+            dom.usernameDisplay.style.display = 'none';
+            dom.usernameDisplay.textContent = '';
+            dom.avatarImg.src = '';
+            dom.avatarImg.style.display = 'none';
+            dom.defaultAvatar.style.display = 'block';
+        }
+
         // 更新登录状态
-        function updateLoginState(isLoggedIn) {
+        function updateLoginState(isLoggedIn, options = {}) {
+            const refreshTree = options.refreshTree !== false;
             if (isLoggedIn) {
-                dom.loginItem.style.display = 'none';
-                dom.loginForm.style.display = 'none';
-                dom.logoutItem.classList.remove('disabled');
-                dom.refreshItem.classList.remove('disabled');
-                dom.apiStatusItem.classList.remove('disabled');
-                
-                // 获取用户信息
-                getUserInfo(safeGetStorage('github-token'))
-                    .then(user => {
-                        dom.usernameDisplay.textContent = user.login;
-                        dom.usernameDisplay.style.display = 'inline';
-                        dom.avatarImg.src = user.avatar_url;
-                        dom.avatarImg.style.display = 'block';
-                        dom.defaultAvatar.style.display = 'none';
-                    })
-                    .catch(err => console.error('获取用户信息失败:', err));
+                applyLoggedInUI(null);
+                getUserInfo(getGithubToken())
+                    .then(user => applyLoggedInUI(user))
+                    .catch(err => {
+                        if (isAuthError(err)) handleAuthFailure();
+                        else console.error('获取用户信息失败:', err);
+                    });
             } else {
-                localStorage.removeItem('github-token');
-                dom.loginItem.style.display = 'flex';
-                dom.logoutItem.classList.add('disabled');
-                dom.refreshItem.classList.add('disabled');
-                dom.apiStatusItem.classList.add('disabled');
-                dom.usernameDisplay.style.display = 'none';
-                dom.avatarImg.style.display = 'none';
-                dom.defaultAvatar.style.display = 'block';
+                safeClearToken();
+                applyLoggedOutUI();
+                // 退出后资源树降级为匿名只读（公开仓库无需 Token 也能浏览）
+                resourceTreeLoaded = false;
+                if (refreshTree) renderResourceTree();
             }
         }
 
@@ -1913,151 +2220,171 @@
                 if (currentBlog) openFileInTab(currentBlog);
             });
 
-            // 保存编辑事件
+            // 编辑内容变化时实时更新未保存状态
+            [dom.editTitle, dom.editTags, dom.editContent].forEach(el => {
+                el.addEventListener('input', () => {
+                    if (activeTabId) snapshotActiveTab();
+                });
+            });
+
+            // 保存编辑事件（新增/编辑：一次提交同时写入 md 与 blog-config.json）
             dom.saveEdit.addEventListener('click', async () => {
-                const token = safeGetStorage('github-token');
+                const token = getGithubToken();
                 if (!token) {
                     showEditStatus('请先登录', true);
                     return;
                 }
+                if (!activeTabId) {
+                    showEditStatus('没有打开的文章', true);
+                    return;
+                }
 
-                const group = document.getElementById('edit-group').value.trim();
+                const tab = openTabs.find(t => t.id === activeTabId);
+                if (!tab) {
+                    showEditStatus('没有打开的文章', true);
+                    return;
+                }
+
+                // 把表单内容写回标签状态
+                snapshotActiveTab();
+
                 const title = dom.editTitle.value.trim();
-                const tags = dom.editTags.value.split(',').map(t => t.trim()).filter(t => t);
+                const tags = parseTagsInput(dom.editTags.value);
                 const content = dom.editContent.value;
+                const isNew = tab.isNew;
 
                 if (!title) {
                     showEditStatus('标题不能为空', true);
                     return;
                 }
-
-                if (!isEditMode && !group) {
-                    showEditStatus('请选择分组', true);
+                if (title.includes('/') || title.includes('\\')) {
+                    showEditStatus('标题不能包含斜杠', true);
                     return;
                 }
 
+                let group = '';
+                if (isNew) {
+                    group = document.getElementById('edit-group').value.trim();
+                    if (!group) {
+                        showEditStatus('请选择分组', true);
+                        return;
+                    }
+                    if (group.includes('/') || group.includes('\\')) {
+                        showEditStatus('分组不能包含斜杠', true);
+                        return;
+                    }
+                }
+
+                const filePath = isNew
+                    ? `blog/${group}/${title}.md`
+                    : (tab.blog.path || '');
+                if (!filePath) {
+                    showEditStatus('找不到文件路径', true);
+                    return;
+                }
+
+                dom.saveEdit.disabled = true;
+
                 try {
                     showEditStatus('保存中...');
-
                     const octokit = new Octokit({ auth: token });
-                    const encodedContent = btoa(unescape(encodeURIComponent(content)));
+                    const repoInfo = { owner: config.owner, repo: config.repo, branch: config.branch };
 
-                    let filePath;
+                    // 1. 读取远端配置（UTF-8 安全解码）
+                    const remote = await fetchBlogConfig(octokit, repoInfo);
 
-                    if (!isEditMode) {
-                        // 新增模式
-                        filePath = `blog/${group}/${title}.md`;
+                    // 2. 计算新的配置记录
+                    const uuid = isNew
+                        ? makeUuid()
+                        : (tab.blog.blog_uuid ?? tab.blog.uuid ?? '');
+                    const existing = findBlogEntry(remote.config, { uuid, path: filePath });
+                    const targetGroup = isNew
+                        ? group
+                        : ((existing && existing.group) || tab.blog.group || currentEditFile?.group || '');
 
-                        await octokit.rest.repos.createOrUpdateFileContents({
-                            owner: config.owner,
-                            repo: config.repo,
-                            path: filePath,
-                            message: `新增博客: ${title}`,
-                            content: encodedContent,
-                            branch: config.branch
-                        });
-
-                        // 更新blog-config.json
-                        const configResponse = await octokit.rest.repos.getContent({
-                            owner: config.owner,
-                            repo: config.repo,
-                            path: 'blog-config.json',
-                            ref: config.branch
-                        });
-
-                        const configContent = atob(configResponse.data.content);
-                        let blogConfig = JSON.parse(configContent);
-
-                        // 确保有 blogs 字段
-                        if (!blogConfig.blogs) {
-                            blogConfig.blogs = {};
-                        }
-                        if (!blogConfig.blogs[group]) {
-                            blogConfig.blogs[group] = [];
-                        }
-                        blogConfig.blogs[group].push({
-                            blog_uuid: generateUUID(),
-                            title: title,
-                            description: title,
-                            tags: tags.length > 0 ? tags : ['未分类'],
-                            path: filePath
-                        });
-
-                        const encodedConfig = btoa(unescape(encodeURIComponent(JSON.stringify(blogConfig, null, 2))));
-                        await octokit.rest.repos.createOrUpdateFileContents({
-                            owner: config.owner,
-                            repo: config.repo,
-                            path: 'blog-config.json',
-                            message: `更新blog配置: 新增 ${title}`,
-                            content: encodedConfig,
-                            sha: configResponse.data.sha,
-                            branch: config.branch
-                        });
-
-                    } else {
-                        // 编辑模式
-                        filePath = currentEditFile.path;
-
-                        // 获取当前文件SHA
-                        const { data: fileData } = await octokit.rest.repos.getContent({
-                            owner: config.owner,
-                            repo: config.repo,
-                            path: filePath,
-                            ref: config.branch
-                        });
-
-                        await octokit.rest.repos.createOrUpdateFileContents({
-                            owner: config.owner,
-                            repo: config.repo,
-                            path: filePath,
-                            message: `更新 ${title}`,
-                            content: encodedContent,
-                            sha: fileData.sha,
-                            branch: config.branch
-                        });
+                    if (!isNew && !targetGroup) {
+                        throw new Error('blog-config.json 中找不到该文章的分组，请检查配置');
                     }
 
-                    // 更新editedContents
-                    if (activeTabId) {
-                        editedContents.set(activeTabId, content);
+                    const updated = upsertBlogEntry(remote.config, {
+                        group: targetGroup,
+                        title,
+                        tags,
+                        path: filePath,
+                        uuid,
+                        mode: isNew ? 'create' : 'update'
+                    });
+                    const configText = serializeBlogConfig(updated.config);
+
+                    // 3. 一次原子提交：md + blog-config.json + 待提交资源
+                    const batch = new CommitBatch({
+                        octokit,
+                        owner: config.owner,
+                        repo: config.repo,
+                        branch: config.branch
+                    });
+                    batch.add(filePath, content);
+                    batch.add('blog-config.json', configText);
+                    const resourceCount = appendPendingResources(batch);
+
+                    const commitResult = await batch.commit(
+                        isNew ? `新增博客: ${title}` : `更新博客: ${title}`
+                    );
+                    if (!commitResult.success) {
+                        throw new Error(commitResult.error);
                     }
 
-                    // 更新当前博客信息
-                    if (currentEditFile) {
-                        currentEditFile.title = title;
-                        currentEditFile.tags = tags;
-                        currentEditFile.path = filePath;
-                        currentEditFile.group = group || currentEditFile.group;
+                    // 4. 提交成功后同步本地状态
+                    tab.isNew = false;
+                    tab.blog.title = title;
+                    tab.blog.tags = tags.slice();
+                    tab.blog.path = filePath;
+                    tab.blog.blog_uuid = uuid;
+                    tab.blog.uuid = uuid;
+                    tab.blog.group = updated.group;
+                    tab.title = title;
+                    tab.originalTitle = title;
+                    tab.originalTags = tags.slice();
+
+                    // 草稿标签的 id 是临时的，保存后用真实 uuid 作为标签 id，避免重开同一篇时出现重复标签
+                    if (tab.id !== uuid) {
+                        editedContents.delete(tab.id);
+                        originalContents.delete(tab.id);
+                        dirtyTabs.delete(tab.id);
+                        tab.id = uuid;
+                        activeTabId = uuid;
                     }
+                    editedContents.set(uuid, content);
+                    originalContents.set(uuid, content);
+                    dirtyTabs.delete(uuid);
+                    currentEditFile = tab.blog;
 
-                    // 更新标签页标题
-                    const tab = openTabs.find(t => t.id === activeTabId);
-                    if (tab) {
-                        tab.title = title;
-                        tab.blog = currentEditFile;
-                        renderTabs();
-                    }
+                    pendingResourceFiles.clear();
+                    pendingResourceFolders.clear();
+                    updatePendingResourceBadge();
+                    resourceTreeLoaded = false;
 
-                    showEditStatus('保存成功！');
+                    renderTabs();
+                    showEditStatus(resourceCount > 0
+                        ? `保存成功，同时提交了 ${resourceCount} 个资源文件`
+                        : '保存成功！');
 
-                    // 刷新博客列表
-                    setTimeout(async () => {
-                        // 上传缓存的资源文件
-                        await uploadAllPendingResources();
-                        await initBlog();
-                        // 如果是新增的文件，可能需要切换到查看模式
-                        if (!isEditMode) {
-                            currentBlog = currentEditFile;
-                            switchToShow(currentBlog, dom);
-                            loadBlogContent(currentBlog, dom, renderMarkdown);
-                        }
-                    }, 1000);
+                    // 5. 重新拉取列表，并展示刚保存的文章
+                    await initBlog();
+                    await refreshResourceTree();
 
+                    currentBlog = allBlogs.find(b => String(b.uuid) === String(uuid) || b.path === filePath) || tab.blog;
+                    switchToShow(currentBlog, dom);
+                    loadBlogContent(currentBlog, dom, renderMarkdown);
+                    loadCommitInfo(currentBlog);
                 } catch (error) {
                     console.error('保存失败:', error);
                     showEditStatus(`保存失败: ${error.message}`, true);
+                } finally {
+                    dom.saveEdit.disabled = false;
                 }
             });
+
 
             // 登录相关事件
             dom.avatarBtn.addEventListener('click', (e) => {
@@ -2091,19 +2418,24 @@
             });
 
             dom.apiStatusItem.addEventListener('click', async () => {
-                const token = safeGetStorage('github-token');
-                if (!token) {
-                    alert('请先登录');
-                    return;
-                }
-
                 try {
-                    const [user, rateLimit] = await Promise.all([
-                        getUserInfo(token),
-                        getRateLimit(token)
-                    ]);
+                    let token = getGithubToken();
+                    let loginName = '未登录（匿名限额）';
 
-                    document.getElementById('modal-user-login').textContent = user.login;
+                    if (token) {
+                        try {
+                            const user = await getUserInfo(token);
+                            loginName = user.login;
+                        } catch (error) {
+                            if (!isAuthError(error)) throw error;
+                            handleAuthFailure('GitHub Token 已失效（Bad credentials），已切换为匿名查询限额。');
+                            token = '';
+                        }
+                    }
+
+                    const rateLimit = await getRateLimit(token);
+
+                    document.getElementById('modal-user-login').textContent = loginName;
                     document.getElementById('modal-core-remaining').textContent = rateLimit.resources.core.remaining;
                     document.getElementById('modal-core-limit').textContent = rateLimit.resources.core.limit;
                     document.getElementById('modal-core-reset').textContent = new Date(rateLimit.resources.core.reset * 1000).toLocaleString();
@@ -2119,19 +2451,38 @@
                 }
             });
 
-            dom.submitLoginBtn.addEventListener('click', () => {
-                const token = dom.githubTokenInput.value.trim();
-                if (token) {
+            dom.submitLoginBtn.addEventListener('click', async () => {
+                const token = sanitizeToken(dom.githubTokenInput.value);
+                if (!token) {
+                    dom.githubTokenInput.focus();
+                    return;
+                }
+
+                dom.submitLoginBtn.disabled = true;
+                try {
+                    // 先校验再落库，避免把带换行/失效的 Token 存进 localStorage 后到处 401
+                    const user = await getUserInfo(token);
                     safeSetStorage('github-token', token);
-                    updateLoginState(true);
+                    dom.githubTokenInput.value = token;
+                    applyLoggedInUI(user);
                     dom.loginMenu.classList.remove('show');
+                    resourceTreeLoaded = false;
+                    renderResourceTree();
+                    showToast(`已登录：${user.login}`);
+                } catch (error) {
+                    const message = isAuthError(error)
+                        ? 'Token 无效或已失效（Bad credentials），请确认复制完整且未带空格/换行'
+                        : `校验 Token 失败: ${error.message}`;
+                    alert(message);
+                } finally {
+                    dom.submitLoginBtn.disabled = false;
                 }
             });
 
             // 新增blog事件
             dom.addBlogItem.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const token = safeGetStorage('github-token');
+                const token = getGithubToken();
                 if (!token) {
                     alert('请先登录后再新增blog');
                     return;
@@ -2183,12 +2534,17 @@
                 filterResourceItems('');
                 dom.resourceSearchClear.style.display = 'none';
             });
+
+            // 提交待上传的资源
+            dom.resourceCommitBtn.addEventListener('click', async () => {
+                await commitPendingResources();
+            });
         }
 
         // 加载编辑界面的分组列表
         async function loadGroupsForEdit() {
             try {
-                const response = await fetch('blog-config.json');
+                const response = await fetch(`blog-config.json?t=${Date.now()}`, { cache: 'no-store' });
                 if (response.ok) {
                     const config = await response.json();
                     const groupSelect = document.getElementById('edit-group');
@@ -2207,118 +2563,6 @@
             }
         }
 
-        // 生成UUID
-        function generateUUID() {
-            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-                const r = Math.random() * 16 | 0;
-                const v = c === 'x' ? r : (r & 0x3 | 0x8);
-                return v.toString(16);
-            });
-        }
-
-        // 新增blog
-        async function addNewBlog() {
-            const token = safeGetStorage('github-token');
-            if (!token) {
-                showAddBlogStatus('请先登录', true);
-                return;
-            }
-
-            const group = dom.newBlogGroup.value.trim();
-            const title = dom.newBlogTitle.value.trim();
-            const tags = dom.newBlogTags.value.split(',').map(t => t.trim()).filter(t => t);
-            const content = dom.newBlogContent.value.trim();
-
-            // 验证必填字段
-            if (!group) {
-                showAddBlogStatus('请选择分组', true);
-                return;
-            }
-            if (!title) {
-                showAddBlogStatus('请输入标题', true);
-                return;
-            }
-            if (!content) {
-                showAddBlogStatus('请输入博客内容', true);
-                return;
-            }
-
-            try {
-                showAddBlogStatus('保存中...');
-
-                const octokit = new Octokit({ auth: token });
-
-                // 生成文件路径：blog/<group>/<title>.md
-                const filePath = `blog/${group}/${title}.md`;
-                const encodedContent = btoa(unescape(encodeURIComponent(content)));
-
-                // 创建新文件
-                await octokit.rest.repos.createOrUpdateFileContents({
-                    owner: config.owner,
-                    repo: config.repo,
-                    path: filePath,
-                    message: `新增博客: ${title}`,
-                    content: encodedContent,
-                    branch: config.branch
-                });
-
-                // 更新blog-config.json
-                const configResponse = await octokit.rest.repos.getContent({
-                    owner: config.owner,
-                    repo: config.repo,
-                    path: 'blog-config.json',
-                    ref: config.branch
-                });
-
-                const configContent = atob(configResponse.data.content);
-                let blogConfig = JSON.parse(configContent);
-
-                // 确保有 blogs 字段
-                if (!blogConfig.blogs) {
-                    blogConfig.blogs = {};
-                }
-                if (!blogConfig.blogs[group]) {
-                    blogConfig.blogs[group] = [];
-                }
-                blogConfig.blogs[group].push({
-                    blog_uuid: generateUUID(), // 使用配置文件中的字段名
-                    title: title,
-                    description: title, // 简单描述
-                    tags: tags.length > 0 ? tags : ['未分类'],
-                    path: filePath
-                });
-
-                // 更新配置文件
-                const encodedConfig = btoa(unescape(encodeURIComponent(JSON.stringify(blogConfig, null, 2))));
-                await octokit.rest.repos.createOrUpdateFileContents({
-                    owner: config.owner,
-                    repo: config.repo,
-                    path: 'blog-config.json',
-                    message: `更新blog配置: 新增 ${title}`,
-                    content: encodedConfig,
-                    sha: configResponse.data.sha,
-                    branch: config.branch
-                });
-
-                showAddBlogStatus('新增成功！');
-                setTimeout(() => {
-                    dom.addBlogModal.style.display = 'none';
-                    clearAddBlogForm();
-                    // 刷新博客列表
-                    initBlog();
-                }, 1500);
-
-            } catch (error) {
-                console.error('新增blog失败:', error);
-                showAddBlogStatus(`新增失败: ${error.message}`, true);
-            }
-        }
-
-        // 显示新增blog状态
-        function showAddBlogStatus(msg, isError = false) {
-            dom.addBlogStatus.textContent = msg;
-            dom.addBlogStatus.className = isError ? 'status error' : 'status success';
-        }
 
         // 显示编辑状态
         function showEditStatus(msg, isError = false) {

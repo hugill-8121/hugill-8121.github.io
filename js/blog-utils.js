@@ -1,6 +1,6 @@
 /**
  * 博客工具函数
- * 包含容器切换、Markdown渲染等通用功能
+ * 包含容器切换、Markdown 渲染等通用功能
  */
 
 // 容器切换函数
@@ -26,31 +26,6 @@ export function switchToShow(blog, dom) {
     if (sidebarLeft) sidebarLeft.style.display = 'none';
 }
 
-export function switchToEdit(blog, dom) {
-    // 填充编辑表单
-    dom.editTitle.value = blog.title;
-    dom.editTags.value = blog.tags.join(',');
-    
-    // 加载原始Markdown内容
-    dom.editStatus.textContent = '';
-    fetch(blog.path)
-        .then(res => res.text())
-        .then(content => {
-            dom.editContent.value = content;
-        })
-        .catch(err => {
-            console.error('加载编辑内容失败:', err);
-            dom.editStatus.textContent = `加载失败: ${err.message}`;
-            dom.editStatus.className = 'status error';
-        });
-
-    // 切换容器
-    dom.containers.show.classList.add('container-hidden');
-    dom.containers.show.classList.remove('container-active');
-    dom.containers.edit.classList.add('container-active');
-    dom.containers.edit.classList.remove('container-hidden');
-}
-
 // 加载博客内容
 export function loadBlogContent(blog, dom, renderMarkdownFunc) {
     // 显示加载状态
@@ -61,7 +36,7 @@ export function loadBlogContent(blog, dom, renderMarkdownFunc) {
     // 设置标题和标签
     dom.showTitle.textContent = blog.title;
     dom.showTags.innerHTML = '';
-    blog.tags.forEach(tag => {
+    (blog.tags || []).forEach(tag => {
         const tagElement = document.createElement('span');
         tagElement.className = 'tag';
         tagElement.textContent = tag;
@@ -132,12 +107,17 @@ export function loadBlogContent(blog, dom, renderMarkdownFunc) {
         });
 }
 
-// Markdown渲染函数
+/**
+ * Markdown 渲染：先处理 ~~~~ 围栏代码块，再交给 showdown，
+ * 最后用 DOMPurify 清洗，避免文章内容注入脚本（存储型 XSS）。
+ * @param {string} markdownContent
+ * @returns {string}
+ */
 export function renderMarkdown(markdownContent) {
     // 处理代码块
-    let processedContent = markdownContent
+    let processedContent = String(markdownContent ?? '')
         .replace(/~~~~\{(.*?)\}\n([\s\S]*?)~~~~/g, (match, lang, code) => {
-            return `<pre><code class="language-${lang}">${escapeHtml(code)}</code></pre>`;
+            return `<pre><code class="language-${escapeHtml(lang.trim())}">${escapeHtml(code)}</code></pre>`;
         })
         .replace(/~~~~\n([\s\S]*?)~~~~/g, (match, code) => {
             return `<pre><code>${escapeHtml(code)}</code></pre>`;
@@ -150,12 +130,26 @@ export function renderMarkdown(markdownContent) {
         strikethrough: true,
         ghCodeBlocks: true
     });
-    return converter.makeHtml(processedContent);
+    const html = converter.makeHtml(processedContent);
+
+    if (window.DOMPurify) {
+        return window.DOMPurify.sanitize(html, {
+            ADD_ATTR: ['target', 'rel'],
+            ADD_TAGS: ['iframe'] // 允许嵌入视频等，属性仍会被清洗
+        });
+    }
+
+    console.warn('DOMPurify 未加载，Markdown 输出未经清洗');
+    return html;
 }
 
-// HTML转义函数
-function escapeHtml(markdown) {
-    return markdown
+/**
+ * HTML 转义
+ * @param {string} text
+ * @returns {string}
+ */
+export function escapeHtml(text) {
+    return String(text ?? '')
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')

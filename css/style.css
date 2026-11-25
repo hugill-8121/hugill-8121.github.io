@@ -976,6 +976,66 @@ h1 {
     color: #6b7280;
 }
 
+/* 资源提交按钮 */
+.resource-commit-bar {
+    padding: 0 0.5rem 0.5rem 0.5rem;
+}
+
+.resource-commit-btn {
+    width: 100%;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    background-color: #f9fafb;
+    color: #374151;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.resource-commit-btn:hover:not(:disabled) {
+    background-color: #eff6ff;
+    border-color: #93c5fd;
+    color: #1d4ed8;
+}
+
+.resource-commit-btn:disabled {
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+
+.resource-loading,
+.resource-empty {
+    padding: 1rem;
+    color: #6b7280;
+    font-size: 0.85rem;
+}
+
+.resource-empty.error {
+    color: #dc2626;
+}
+
+/* 待提交资源标记 */
+.tree-item.file.pending {
+    background-color: #fffbeb;
+}
+
+.pending-badge {
+    margin-left: auto;
+    padding: 0 0.35rem;
+    border-radius: 3px;
+    background-color: #fef3c7;
+    color: #b45309;
+    font-size: 0.7rem;
+    white-space: nowrap;
+}
+
+/* 标签页未保存标记 */
+.edit-tab-dirty {
+    color: #f59e0b;
+    margin-right: 0.25rem;
+}
+
 .tree-item {
     padding: 0.4rem 0.6rem;
     cursor: pointer;
@@ -1121,4 +1181,41 @@ h1 {
     height: 1px;
     background-color: #e5e7eb;
     margin: 0.25rem 0;
+}
+/* ===== Token 失效提示条（浮动，不打断浏览） ===== */
+.app-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translate(-50%, 20px);
+    z-index: 3000;
+    max-width: min(90vw, 640px);
+    padding: 10px 16px;
+    border-radius: 8px;
+    background: #065f46;
+    color: #fff;
+    font-size: 13px;
+    line-height: 1.5;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+}
+
+.app-toast.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.app-toast.error {
+    background: #b91c1c;
+}
+
+/* ===== 资源栏匿名只读提示 ===== */
+#resource-tree[data-anonymous="1"]::after {
+    content: "未登录：仅可浏览资源，上传 / 新建 / 删除需先登录";
+    display: block;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #9ca3af;
 }

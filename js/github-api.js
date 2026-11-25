@@ -1,300 +1,426 @@
 import { Octokit } from "https://esm.sh/octokit";
+import { decodeBase64Utf8 } from "./blog-config.js";
 
 /**
- * 获取文件的提交记录（最新一条）
- * @param {string} owner - 仓库所有者
- * @param {string} repo - 仓库名
- * @param {string} path - 文件路径
- * @param {string} branch - 分支名
- * @param {string} [token] - GitHub Token（可选）
- * @returns {Promise<Array>} 提交记录数组
+ * 把仓库内的相对路径按段编码（兼容中文与空格）
+ * @param {string} path
+ * @returns {string}
  */
-async function getFileCommits(owner, repo, path, branch, token) {
-    // 处理中文路径编码（按GitHub API要求）
-    const encodedPath = path.split('/')
+export function encodeRepoPath(path) {
+    return String(path || '')
+        .split('/')
+        .filter(segment => segment !== '')
         .map(segment => encodeURIComponent(segment))
         .join('/');
-
-    const url = `https://api.github.com/repos/${owner}/${repo}/commits?path=${encodedPath}&ref=${branch}&per_page=1`;
-    
-    const headers = {
-        'Accept': 'application/json',
-        'User-Agent': 'Blog-App' // GitHub API要求必须有User-Agent
-    };
-
-    // 如果有token，添加认证头
-    if (token) {
-        headers['Authorization'] = `token ${token}`;
-    }
-
-    const response = await fetch(url, { headers });
-    
-    if (!response.ok) {
-        // 特殊处理404（文件不存在）和403（无权限）
-        if (response.status === 404) throw new Error(`文件不存在: ${path}`);
-        if (response.status === 403) throw new Error(`无权限访问，可能需要登录或Token权限不足`);
-        throw new Error(`获取提交记录失败: ${response.statusText}`);
-    }
-
-    return await response.json();
 }
 
 /**
- * 获取当前认证用户的信息
- * @param {string} token - GitHub Token
- * @returns {Promise<Object>} 用户信息对象
+ * 清理粘贴进来的 Token：去掉换行/空格/BOM、多余的 "token " 前缀，
+ * 并从混杂文本中提取 GitHub Token 本体，避免出现 Bad credentials。
+ * @param {string} raw
+ * @returns {string}
+ */
+export function sanitizeToken(raw) {
+    const text = String(raw == null ? '' : raw)
+        .replace(/[\u200b-\u200d\ufeff]/g, '')
+        .trim();
+    const match = text.match(/(gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/);
+    if (match) return match[1];
+    return text.replace(/^(token|bearer)\s*:\s*/i, '').replace(/\s+/g, '');
+}
+
+/**
+ * 判断错误是否是认证失败（Token 失效 / 带上了脏字符）
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export function isAuthError(error) {
+    const status = error && error.status;
+    const message = String((error && error.message) || error || '');
+    return status === 401 || /bad credentials|401 unauthorized/i.test(message);
+}
+
+function buildHeaders(token) {
+    const headers = { 'Accept': 'application/json' };
+    const safeToken = sanitizeToken(token);
+    if (safeToken) headers['Authorization'] = `token ${safeToken}`;
+    return headers;
+}
+
+function makeRequestError(message, status) {
+    const error = new Error(message);
+    error.status = status;
+    return error;
+}
+
+async function fetchCommitsPage(owner, repo, branch, encodedPath, token, perPage, page) {
+    const url = `https://api.github.com/repos/${owner}/${repo}/commits?path=${encodedPath}&ref=${encodeURIComponent(branch)}&per_page=${perPage}&page=${page}`;
+    const response = await fetch(url, { headers: buildHeaders(token) });
+
+    if (!response.ok) {
+        if (response.status === 404) throw makeRequestError(`文件不存在: ${encodedPath}`, 404);
+        if (response.status === 401) throw makeRequestError('Token 无效或已失效（Bad credentials）', 401);
+        if (response.status === 403) throw makeRequestError('无权限访问，可能需要登录或 Token 权限不足', 403);
+        throw makeRequestError(`获取提交记录失败: ${response.status} ${response.statusText}`, response.status);
+    }
+    return response.json();
+}
+
+async function fetchCommitsForPath(owner, repo, path, branch, token, perPage) {
+    const encodedPath = encodeRepoPath(path);
+    const commits = [];
+    let page = 1;
+
+    async function collect(activeToken) {
+        commits.length = 0;
+        page = 1;
+        while (true) {
+            const list = await fetchCommitsPage(owner, repo, branch, encodedPath, activeToken, perPage, page);
+            if (!Array.isArray(list) || list.length === 0) break;
+            commits.push(...list);
+            if (list.length < perPage) break;
+            page += 1;
+            if (page > 50) break; // 安全上限，避免异常分页死循环
+        }
+        return commits;
+    }
+
+    try {
+        return await collect(token);
+    } catch (error) {
+        // 带了脏/过期 Token 时，退回匿名读取，保证公开仓库的读取功能不受影响
+        if (token && isAuthError(error)) {
+            console.warn('Token 认证失败，改用匿名读取提交记录');
+            return await collect('');
+        }
+        throw error;
+    }
+}
+
+/**
+ * 获取单个文件的最新提交记录
+ * @param {string} owner
+ * @param {string} repo
+ * @param {string} path
+ * @param {string} branch
+ * @param {string} [token]
+ * @returns {Promise<Array>}
+ */
+async function getFileCommits(owner, repo, path, branch, token) {
+    const commits = await fetchCommitsForPath(owner, repo, path, branch, token, 1);
+    return commits;
+}
+
+/**
+ * 批量获取文件提交记录（并发受限、逐条上报进度）
+ * @param {string} owner
+ * @param {string} repo
+ * @param {string[]} paths
+ * @param {string} branch
+ * @param {string} [token]
+ * @param {number} [perPage=100] GitHub commits API 单页上限为 100
+ * @param {(done:number, total:number)=>void} [onProgress]
+ * @returns {Promise<Array<{path:string, commits:Array, total:number, error:string|null}>>}
+ */
+async function batchGetFileCommits(owner, repo, paths, branch, token, perPage = 100, onProgress) {
+    // GitHub commits API 的 per_page 上限是 100，超出会返回 422
+    const safePerPage = Math.max(1, Math.min(perPage, 100));
+    const results = new Array(paths.length);
+    const concurrency = Math.min(4, paths.length || 1);
+    let cursor = 0;
+    let done = 0;
+
+    async function worker() {
+        while (cursor < paths.length) {
+            const index = cursor++;
+            const path = paths[index];
+            try {
+                const commits = await fetchCommitsForPath(owner, repo, path, branch, token, safePerPage);
+                results[index] = { path, commits, total: commits.length, error: null };
+            } catch (error) {
+                results[index] = { path, commits: [], total: 0, error: error.message };
+            }
+            done += 1;
+            if (typeof onProgress === 'function') {
+                try { onProgress(done, paths.length); } catch (_) { /* 进度回调异常不影响主流程 */ }
+            }
+        }
+    }
+
+    await Promise.all(Array.from({ length: concurrency }, () => worker()));
+    return results;
+}
+
+/**
+ * 获取当前认证用户信息
+ * @param {string} token
+ * @returns {Promise<Object>}
  */
 async function getUserInfo(token) {
-    const octokit = new Octokit({ auth: token });
+    const octokit = new Octokit({ auth: sanitizeToken(token) || undefined });
     const { data } = await octokit.rest.users.getAuthenticated();
     return data;
 }
 
 /**
- * 获取API限流状态
- * @param {string} token - GitHub Token
- * @returns {Promise<Object>} 限流信息对象
+ * 获取 API 限流状态（不传 Token 时返回匿名限额）
+ * @param {string} [token]
+ * @returns {Promise<Object>}
  */
 async function getRateLimit(token) {
-    const octokit = new Octokit({ auth: token });
+    const octokit = new Octokit({ auth: sanitizeToken(token) || undefined });
     const { data } = await octokit.rest.rateLimit.get();
     return data;
 }
 
 /**
- * 批量获取文件的所有提交记录（自动分页查询）
- * @param {string} owner - 仓库所有者
- * @param {string} repo - 仓库名
- * @param {string[]} paths - 文件路径数组
- * @param {string} branch - 分支名
- * @param {string} [token] - GitHub Token（可选）
- * @param {number} [perPage=100] - 每页条数，默认100，最大500
- * @returns {Promise<Array>} 包含每个文件所有提交记录的数组
+ * 读取 blog-config.json（同时拿到 sha 与 UTF-8 文本）
+ * @param {Octokit} octokit
+ * @param {{owner:string, repo:string, branch:string, path?:string}} repoInfo
+ * @returns {Promise<{config: Object, sha: string, text: string}>}
  */
-async function batchGetFileCommits(owner, repo, paths, branch, token, perPage = 100) {
-    // 限制分页大小在1-500之间
-    const safePerPage = Math.max(1, Math.min(perPage, 500));
-    
-    // 处理每个文件的提交查询
-    return Promise.all(paths.map(async (path) => {
-        try {
-            // 处理中文路径编码（按GitHub API要求）
-            const encodedPath = path.split('/')
-                .map(segment => encodeURIComponent(segment))
-                .join('/');
-            
-            const allCommits = [];
-            let page = 1;
-            let hasMore = true;
-            
-            // 构建请求头
-            const headers = {
-                'Accept': 'application/json',
-                'User-Agent': 'Blog-App' // GitHub API要求必须有User-Agent
-            };
-            
-            // 如果有token，添加认证头
-            if (token) {
-                headers['Authorization'] = `token ${token}`;
-            }
-            
-            // 分页查询所有提交记录
-            while (hasMore) {
-                const url = `https://api.github.com/repos/${owner}/${repo}/commits?path=${encodedPath}&ref=${branch}&per_page=${safePerPage}&page=${page}`;
-                
-                const response = await fetch(url, { headers });
-                
-                if (!response.ok) {
-                    // 特殊处理404（文件不存在）和403（无权限）
-                    if (response.status === 404) throw new Error(`文件不存在: ${path}`);
-                    if (response.status === 403) throw new Error(`无权限访问，可能需要登录或Token权限不足`);
-                    throw new Error(`获取提交记录失败: ${response.statusText}`);
-                }
-                
-                const commits = await response.json();
-                
-                // 如果当前页没有数据，说明已到最后一页
-                if (commits.length === 0) {
-                    hasMore = false;
-                    break;
-                }
-                
-                // 添加到结果数组
-                allCommits.push(...commits);
-                
-                // 检查是否还有更多页（通过响应头的Link判断）
-                const linkHeader = response.headers.get('Link');
-                hasMore = linkHeader?.includes('rel="next"') || false;
-                
-                page++;
-            }
-            
-            return {
-                path,
-                commits: allCommits,
-                total: allCommits.length,
-                error: null
-            };
-        } catch (error) {
-            return {
-                path,
-                commits: [],
-                total: 0,
-                error: error.message
-            };
-        }
-    }));
+async function fetchBlogConfig(octokit, repoInfo) {
+    const path = repoInfo.path || 'blog-config.json';
+    const { data } = await octokit.rest.repos.getContent({
+        owner: repoInfo.owner,
+        repo: repoInfo.repo,
+        path,
+        ref: repoInfo.branch
+    });
+
+    if (Array.isArray(data) || !data || typeof data.content !== 'string') {
+        throw new Error(`${path} 不是一个可读取的文件`);
+    }
+
+    const text = decodeBase64Utf8(data.content);
+    let config;
+    try {
+        config = JSON.parse(text);
+    } catch (error) {
+        throw new Error(`解析 ${path} 失败: ${error.message}`);
+    }
+    return { config, sha: data.sha, text };
 }
 
-// ==========================================================
-// 你要的核心：FileChange 类（累积操作 → 一次提交）
-// ==========================================================
-class FileChange {
-  /**
-   * @param {Object} config
-   * @param {string} config.owner
-   * @param {string} config.repo
-   * @param {string} config.branch
-   * @param {string} config.token
-   */
-  constructor(config) {
-    this.owner = config.owner;
-    this.repo = config.repo;
-    this.branch = config.branch;
-    this.token = config.token;
-    this.octokit = new Octokit({ auth: this.token });
-
-    // 所有操作都存在这里
-    this.upsert = [];   // 新增/修改
-    this.remove = [];   // 删除
-    this.rename = [];   // 重命名/移动
-  }
-
-  /**
-   * 新增或修改文件
-   * @param {string} path
-   * @param {string} content
-   */
-  add(path, content) {
-    this.upsert.push({ path, content });
-  }
-
-  /**
-   * 删除文件
-   * @param {string} path
-   */
-  delete(path) {
-    this.remove.push({ path });
-  }
-
-  /**
-   * 重命名 / 移动文件
-   * @param {string} fromPath
-   * @param {string} toPath
-   */
-  rename(fromPath, toPath) {
-    this.rename.push({ from: fromPath, to: toPath });
-  }
-
-  // 别名：移动 = 重命名
-  move(fromPath, toPath) {
-    this.rename(fromPath, toPath);
-  }
-
-  /**
-   * 一次性提交所有变更（只产生一次 commit + push）
-   * @param {string} message - commit 信息
-   */
-  async commit(message) {
-    try {
-      // 1. 获取最新分支信息
-      const { data: branchData } = await this.octokit.rest.repos.getBranch({
-        owner: this.owner,
-        repo: this.repo,
-        branch: this.branch,
-      });
-      const latestCommitSha = branchData.commit.sha;
-      const baseTreeSha = branchData.commit.commit.tree.sha;
-
-      const tree = [];
-
-      // 2. 加入新增/修改
-      for (const f of this.upsert) {
-        tree.push({
-          path: f.path,
-          mode: "100644",
-          type: "blob",
-          content: f.content,
-        });
-      }
-
-      // 3. 加入删除
-      for (const f of this.remove) {
-        tree.push({
-          path: f.path,
-          mode: "100644",
-          type: "blob",
-          sha: null,
-        });
-      }
-
-      // 4. 加入重命名/移动
-      for (const op of this.rename) {
-        const file = await this.#getFileContent(op.from);
-        tree.push({ path: op.to, mode: "100644", type: "blob", content: file.content });
-        tree.push({ path: op.from, mode: "100644", type: "blob", sha: null });
-      }
-
-      // 5. 创建新树
-      const { data: newTree } = await this.octokit.rest.git.createTree({
-        owner: this.owner,
-        repo: this.repo,
-        base_tree: baseTreeSha,
-        tree,
-      });
-
-      // 6. 创建提交
-      const { data: newCommit } = await this.octokit.rest.git.createCommit({
-        owner: this.owner,
-        repo: this.repo,
-        message,
-        tree: newTree.sha,
-        parents: [latestCommitSha],
-      });
-
-      // 7. 推送（更新分支）
-      await this.octokit.rest.git.updateRef({
-        owner: this.owner,
-        repo: this.repo,
-        ref: `heads/${this.branch}`,
-        sha: newCommit.sha,
-      });
-
-      console.log("✅ 提交成功！commit:", newCommit.sha);
-      return { success: true, commitSha: newCommit.sha };
-    } catch (err) {
-      console.error("❌ 提交失败:", err);
-      return { success: false, error: err.message };
-    }
-  }
-
-  // 内部工具：获取文件内容（用于重命名/移动）
-  async #getFileContent(path) {
-    const { data: blob } = await this.octokit.rest.git.getBlob({
-      owner: this.owner,
-      repo: this.repo,
-      path,
+/**
+ * 列出仓库某个目录下的全部路径（一次递归取树，避免逐层请求打满限流）
+ * @param {Octokit} octokit
+ * @param {{owner:string, repo:string, branch:string}} repoInfo
+ * @param {string} [subPath] 限定目录，如 'asserts'
+ * @returns {Promise<Array<{path:string, type:'file'|'folder', size:number}>>}
+ */
+async function listRepoPaths(octokit, repoInfo, subPath = '') {
+    const { data } = await octokit.rest.git.getTree({
+        owner: repoInfo.owner,
+        repo: repoInfo.repo,
+        tree_sha: repoInfo.branch,
+        recursive: '1'
     });
-    const content = atob(blob.content.replace(/\n/g, ""));
-    return { content };
-  }
+
+    if (data.truncated) {
+        console.warn('仓库文件树过大，GitHub 返回了截断结果');
+    }
+
+    const prefix = subPath.replace(/\/+$/, '');
+    return (data.tree || [])
+        .filter(item => {
+            if (!prefix) return true;
+            return item.path === prefix || item.path.startsWith(prefix + '/');
+        })
+        .map(item => ({
+            path: item.path,
+            type: item.type === 'tree' ? 'folder' : 'file',
+            size: item.size || 0
+        }));
+}
+
+/**
+ * 批量提交器：一次 commit 提交多个文件的新增/修改/删除
+ * 使用 Git Data API（blob → tree → commit → ref），保证多个文件原子写入
+ */
+class CommitBatch {
+    /**
+     * @param {{octokit: Octokit, owner: string, repo: string, branch: string}} options
+     */
+    constructor({ octokit, owner, repo, branch }) {
+        this.octokit = octokit;
+        this.owner = owner;
+        this.repo = repo;
+        this.branch = branch;
+        /** @type {Map<string, {path:string, action:'write'|'delete', content?:string, encoding?:'utf-8'|'base64'}>} */
+        this.operations = new Map();
+    }
+
+    /**
+     * 新增或覆盖一个文本文件
+     * @param {string} path
+     * @param {string} content
+     * @returns {CommitBatch}
+     */
+    add(path, content) {
+        this.operations.set(path, { path, action: 'write', content: String(content ?? ''), encoding: 'utf-8' });
+        return this;
+    }
+
+    /**
+     * 新增或覆盖一个二进制文件
+     * @param {string} path
+     * @param {string} base64Content 不含 data: 前缀的 base64
+     * @returns {CommitBatch}
+     */
+    addBinary(path, base64Content) {
+        this.operations.set(path, { path, action: 'write', content: base64Content, encoding: 'base64' });
+        return this;
+    }
+
+    /**
+     * 删除一个文件
+     * @param {string} path
+     * @returns {CommitBatch}
+     */
+    delete(path) {
+        this.operations.set(path, { path, action: 'delete' });
+        return this;
+    }
+
+    /**
+     * 重命名/移动文件（读取旧内容后写入新路径，并删除旧路径）
+     * @param {string} fromPath
+     * @param {string} toPath
+     * @returns {Promise<CommitBatch>}
+     */
+    async rename(fromPath, toPath) {
+        const { data } = await this.octokit.rest.repos.getContent({
+            owner: this.owner,
+            repo: this.repo,
+            path: fromPath,
+            ref: this.branch
+        });
+        if (Array.isArray(data) || !data || typeof data.content !== 'string') {
+            throw new Error(`无法重命名：${fromPath} 不是文件`);
+        }
+        this.operations.delete(fromPath);
+        this.operations.set(toPath, { path: toPath, action: 'write', content: data.content, encoding: 'base64' });
+        this.operations.set(fromPath, { path: fromPath, action: 'delete' });
+        return this;
+    }
+
+    get size() {
+        return this.operations.size;
+    }
+
+    /**
+     * 执行提交，返回 {success, commitSha} 或 {success:false, error}
+     * @param {string} message
+     * @returns {Promise<{success:boolean, commitSha?:string, error?:string}>}
+     */
+    async commit(message) {
+        if (this.operations.size === 0) {
+            return { success: false, error: '没有需要提交的变更' };
+        }
+
+        // 并发写入时可能发生引用竞争，失败后基于最新分支重试一次
+        for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+                const branchInfo = await this.octokit.rest.repos.getBranch({
+                    owner: this.owner,
+                    repo: this.repo,
+                    branch: this.branch
+                });
+                const parentSha = branchInfo.data.commit.sha;
+                const baseTreeSha = branchInfo.data.commit.commit.tree.sha;
+
+                // 1. 先把内容写成 blob，拿到 sha（text 与 binary 都走同一条路径）
+                const treeItems = [];
+                for (const op of this.operations.values()) {
+                    if (op.action === 'delete') {
+                        treeItems.push({ path: op.path, mode: '100644', type: 'blob', sha: null });
+                        continue;
+                    }
+                    const { data: blob } = await this.octokit.rest.git.createBlob({
+                        owner: this.owner,
+                        repo: this.repo,
+                        content: op.content,
+                        encoding: op.encoding || 'utf-8'
+                    });
+                    treeItems.push({ path: op.path, mode: '100644', type: 'blob', sha: blob.sha });
+                }
+
+                // 2. 基于最新树创建新树
+                const { data: newTree } = await this.octokit.rest.git.createTree({
+                    owner: this.owner,
+                    repo: this.repo,
+                    base_tree: baseTreeSha,
+                    tree: treeItems
+                });
+
+                // 3. 创建提交
+                const { data: newCommit } = await this.octokit.rest.git.createCommit({
+                    owner: this.owner,
+                    repo: this.repo,
+                    message,
+                    tree: newTree.sha,
+                    parents: [parentSha]
+                });
+
+                // 4. 更新分支引用
+                await this.octokit.rest.git.updateRef({
+                    owner: this.owner,
+                    repo: this.repo,
+                    ref: `heads/${this.branch}`,
+                    sha: newCommit.sha
+                });
+
+                this.operations.clear();
+                return { success: true, commitSha: newCommit.sha };
+            } catch (error) {
+                const status = error && error.status;
+                const retryable = status === 422 || status === 409;
+                if (attempt === 0 && retryable) {
+                    console.warn('提交发生引用竞争，重试一次:', error.message);
+                    continue;
+                }
+                console.error('提交失败:', error);
+                return { success: false, error: error.message };
+            }
+        }
+        return { success: false, error: '提交失败（重试后仍未成功）' };
+    }
+}
+
+/**
+ * 简化调用：一次性提交一组文本文件并返回结果
+ * @param {{octokit: Octokit, owner: string, repo: string, branch: string}} repoInfo
+ * @param {Record<string, string>} files path → 文本内容
+ * @param {string} message
+ */
+async function commitFiles(repoInfo, files, message) {
+    const batch = new CommitBatch(repoInfo);
+    Object.entries(files).forEach(([path, content]) => batch.add(path, content));
+    return batch.commit(message);
+}
+
+/**
+ * 删除远端文件（一次 commit）
+ * @param {{octokit: Octokit, owner: string, repo: string, branch: string}} repoInfo
+ * @param {string[]} paths
+ * @param {string} message
+ */
+async function deleteRepoFiles(repoInfo, paths, message) {
+    const batch = new CommitBatch(repoInfo);
+    paths.forEach(path => batch.delete(path));
+    return batch.commit(message);
 }
 
 export {
-  Octokit,
-  getFileCommits,
-  getUserInfo,
-  getRateLimit,
-  batchGetFileCommits,
-  FileChange       // 导出你要的类
+    Octokit,
+    getFileCommits,
+    getUserInfo,
+    getRateLimit,
+    batchGetFileCommits,
+    fetchBlogConfig,
+    listRepoPaths,
+    CommitBatch,
+    commitFiles,
+    deleteRepoFiles
 };
