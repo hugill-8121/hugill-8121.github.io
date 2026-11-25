@@ -189,6 +189,9 @@
                 <div class="edit-sidebar-left">
                     <div class="sidebar-header">
                         <h3><i class="fa fa-file-text-o"></i> 文件</h3>
+                        <button type="button" class="sidebar-action" id="new-blog-folder" title="在 blog 目录下新建文件夹">
+                            <i class="fa fa-folder-plus"></i> 新建
+                        </button>
                     </div>
                     <div class="file-tree" id="file-tree">
                         <!-- 文件树将动态生成 -->
@@ -219,8 +222,11 @@
                             <input type="text" id="edit-title" class="modal-input" placeholder="请输入文章标题">
                         </div>
                         <div class="form-group">
-                            <label for="edit-tags">标签（用逗号分隔）</label>
-                            <input type="text" id="edit-tags" class="modal-input" placeholder="例如: 技术笔记,grpc">
+                            <label for="tag-input">标签</label>
+                            <div class="tag-editor" id="tag-editor">
+                                <div class="tag-chips" id="tag-chips"></div>
+                                <input type="text" id="tag-input" class="tag-input" placeholder="输入标签后回车（如: grpc）">
+                            </div>
                         </div>
                         <div class="form-group">
                             <label for="edit-content">文章内容（Markdown）</label>
@@ -241,6 +247,14 @@
                     <div class="resource-search">
                         <input type="text" id="resource-search-input" class="resource-search-input" placeholder="搜索资源...">
                         <button id="resource-search-clear" class="resource-search-clear" style="display: none;">×</button>
+                    </div>
+                    <div class="resource-toolbar">
+                        <button type="button" id="resource-upload-btn" class="resource-tool-btn">
+                            <i class="fa fa-upload"></i> 上传
+                        </button>
+                        <button type="button" id="resource-new-folder-btn" class="resource-tool-btn">
+                            <i class="fa fa-folder-plus"></i> 新建文件夹
+                        </button>
                     </div>
                     <div class="resource-commit-bar">
                         <button id="commit-resources" class="resource-commit-btn" disabled>
@@ -298,6 +312,7 @@
         // 全局变量
         let allBlogs = [];
         let allTags = new Set();
+        let blogConfigData = null; // 首页加载过一次的配置，编辑页分组/新建目录复用，避免重复拉取
         let currentBlog = null;
         const config = {
             // 本地开发时使用默认值，生产环境从 hostname 获取
@@ -334,7 +349,9 @@
             showError: document.getElementById('show-error'),
             // 博客编辑相关
             editTitle: document.getElementById('edit-title'),
-            editTags: document.getElementById('edit-tags'),
+            editTags: document.getElementById('tag-input'),
+            tagChips: document.getElementById('tag-chips'),
+            tagEditor: document.getElementById('tag-editor'),
             editContent: document.getElementById('edit-content'),
             editStatus: document.getElementById('edit-status'),
             // 按钮
@@ -368,9 +385,12 @@
             // 编辑界面相关
             editTabs: document.getElementById('edit-tabs'),
             fileTree: document.getElementById('file-tree'),
+            newBlogFolderBtn: document.getElementById('new-blog-folder'),
             resourceTree: document.getElementById('resource-tree'),
             resourceSearchInput: document.getElementById('resource-search-input'),
             resourceSearchClear: document.getElementById('resource-search-clear'),
+            resourceUploadBtn: document.getElementById('resource-upload-btn'),
+            resourceNewFolderBtn: document.getElementById('resource-new-folder-btn'),
             fileContextMenu: document.getElementById('file-context-menu'),
             ctxCopyPath: document.getElementById('ctx-copy-path'),
             ctxOpenFile: document.getElementById('ctx-open-file'),
@@ -488,7 +508,8 @@
             // 清空表单
             document.getElementById('edit-group').value = '';
             document.getElementById('edit-title').value = '';
-            document.getElementById('edit-tags').value = '';
+            renderEditorTags([]);
+            dom.editTags.value = '';
             document.getElementById('edit-content').value = '';
             document.getElementById('edit-status').textContent = '';
 
@@ -591,15 +612,21 @@
 
             let content = '';
             if (!isNew && blog.path) {
-                try {
-                    const res = await fetch(blog.path);
-                    if (!res.ok) throw new Error(`加载失败: ${res.statusText}`);
-                    // 统一成 LF：textarea 会自动把 CRLF 归一为 LF，
-                    // 若保留原始 CRLF，脏检查会永远判定为“已修改”
-                    content = (await res.text()).replace(/\r\n?/g, '\n');
-                } catch (err) {
-                    console.error('加载文件失败:', err);
-                    showEditStatus(`加载文件失败: ${err.message}`, true);
+                const cached = blogContentCache.get(blog.path);
+                if (typeof cached === 'string') {
+                    content = cached;
+                } else {
+                    try {
+                        const res = await fetch(`${blog.path}?t=${Date.now()}`, { cache: 'no-store' });
+                        if (!res.ok) throw new Error(`加载失败: ${res.statusText}`);
+                        // 统一成 LF：textarea 会自动把 CRLF 归一为 LF，
+                        // 若保留原始 CRLF，脏检查会永远判定为“已修改”
+                        content = (await res.text()).replace(/\r\n?/g, '\n');
+                        blogContentCache.set(blog.path, content);
+                    } catch (err) {
+                        console.error('加载文件失败:', err);
+                        showEditStatus(`加载文件失败: ${err.message}`, true);
+                    }
                 }
             }
 
@@ -611,7 +638,8 @@
             currentEditFile = tabBlog;
 
             dom.editTitle.value = tabBlog.title || '';
-            dom.editTags.value = (tabBlog.tags || []).join(',');
+            renderEditorTags(tabBlog.tags || []);
+            dom.editTags.value = '';
             dom.editContent.value = content;
 
             renderTabs();
@@ -627,9 +655,78 @@
             if (!resourceTreeLoaded) await renderResourceTree();
         }
 
-        // 解析标签输入框
+        // 解析标签输入框（兼容旧的逗号输入）
         function parseTagsInput(value) {
-            return String(value || '').split(',').map(t => t.trim()).filter(Boolean);
+            return String(value || '')
+                .split(/[,，]/)
+                .map(t => t.trim())
+                .filter(Boolean);
+        }
+
+        // ==================== 标签编辑器（chip） ====================
+        let editorTags = [];
+
+        function normalizeEditorTags(tags) {
+            const seen = new Set();
+            const list = [];
+            (tags || []).forEach(raw => {
+                const tag = String(raw || '').trim();
+                if (!tag) return;
+                const key = tag.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                list.push(tag);
+            });
+            return list;
+        }
+
+        function renderEditorTags(tags) {
+            editorTags = normalizeEditorTags(tags);
+            dom.tagChips.innerHTML = '';
+            editorTags.forEach(tag => {
+                const chip = document.createElement('span');
+                chip.className = 'tag-chip';
+                chip.dataset.tag = tag;
+                chip.innerHTML = `${escapeHtml(tag)}<span class="tag-chip-remove" title="删除标签">×</span>`;
+                chip.querySelector('.tag-chip-remove').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    removeEditorTag(tag);
+                });
+                dom.tagChips.appendChild(chip);
+            });
+        }
+
+        function addEditorTag(raw) {
+            const parts = parseTagsInput(raw);
+            if (parts.length === 0) return false;
+            let changed = false;
+            parts.forEach(part => {
+                if (!editorTags.some(t => t.toLowerCase() === part.toLowerCase())) {
+                    editorTags.push(part);
+                    changed = true;
+                }
+            });
+            if (changed) {
+                renderEditorTags(editorTags);
+                if (activeTabId) snapshotActiveTab();
+            }
+            return changed;
+        }
+
+        function removeEditorTag(tag) {
+            const next = editorTags.filter(t => t !== tag);
+            renderEditorTags(next);
+            if (activeTabId) snapshotActiveTab();
+        }
+
+        // 读取当前标签（含输入框里还没按回车的部分）
+        function getEditorTags() {
+            const pending = parseTagsInput(dom.editTags.value);
+            if (pending.length > 0) {
+                renderEditorTags(editorTags.concat(pending));
+                dom.editTags.value = '';
+            }
+            return editorTags.slice();
         }
 
         // 把当前表单内容写回标签状态，并更新脏标记
@@ -640,7 +737,7 @@
 
             editedContents.set(activeTabId, dom.editContent.value);
             tab.blog.title = dom.editTitle.value.trim();
-            tab.blog.tags = parseTagsInput(dom.editTags.value);
+            tab.blog.tags = getEditorTags();
             tab.title = tab.blog.title || '(未命名)';
             updateDirtyState(activeTabId);
         }
@@ -682,7 +779,8 @@
             setEditFormMode(tab.isNew);
 
             dom.editTitle.value = tab.blog.title || '';
-            dom.editTags.value = (tab.blog.tags || []).join(',');
+            renderEditorTags(tab.blog.tags || []);
+            dom.editTags.value = '';
             dom.editContent.value = editedContents.get(tabId) ?? '';
             currentEditFile = tab.blog;
 
@@ -765,6 +863,21 @@
 
             // 构建文件树结构
             const fileTree = {};
+
+            // 先放入 blog 目录下已存在（含空目录）的文件夹
+            const ensureFolderNode = (relativePath) => {
+                const parts = relativePath.split('/').filter(Boolean);
+                let node = fileTree;
+                parts.forEach(part => {
+                    if (!node[part]) node[part] = {};
+                    node = node[part];
+                });
+                return node;
+            };
+            blogFolderPaths.forEach(fullPath => {
+                if (fullPath === 'blog') return;
+                ensureFolderNode(fullPath.replace(/^blog\//, ''));
+            });
 
             allBlogs.forEach(blog => {
                 // 路径格式: blog/{group}/{filename}.md 或 blog/{group}/{subfolder}/{filename}.md
@@ -929,11 +1042,72 @@
             dom.ctxNewFolder.style.display = 'none';
         }
 
+        // 在 blog 根目录下新建文件夹（Git 不能存空目录，用 .gitkeep 占位后提交）
+        async function createBlogFolder() {
+            const token = getGithubToken();
+            if (!token) {
+                alert('请先登录后再新建文件夹');
+                return;
+            }
+
+            const rawName = prompt('请输入文件夹名称（可多级，例如：底层/C++）：');
+            if (rawName === null) return;
+
+            let name = rawName.trim().replace(/^\/+|\/+$/g, '');
+            if (name.startsWith('blog/')) name = name.slice(5);
+            if (!name) return;
+            if (/[\\<>:"|?*]/.test(name) || name.split('/').some(part => !part || part === '.' || part === '..')) {
+                alert('文件夹名不合法：不能包含 \\ < > : " | ? *，也不能有空段');
+                return;
+            }
+
+            const folderPath = `blog/${name}`;
+            const exists = blogFolderPaths.includes(folderPath)
+                || repoTreeState.items?.some(item => item.type === 'folder' && item.path === folderPath)
+                || allBlogs.some(blog => blog.path === folderPath || blog.path.startsWith(folderPath + '/'));
+            if (exists) {
+                alert('该文件夹已存在');
+                return;
+            }
+
+            const placeholder = `${folderPath}/.gitkeep`;
+            try {
+                const octokit = createOctokit(token);
+                const batch = new CommitBatch({
+                    octokit,
+                    owner: config.owner,
+                    repo: config.repo,
+                    branch: config.branch
+                });
+                batch.add(placeholder, '');
+                const result = await batch.commit(`新增博客目录: ${name}`);
+                if (!result.success) throw new Error(result.error);
+
+                // 立即写入本地缓存，不再为“看到新目录”多打一次 API
+                if (!blogFolderPaths.includes(folderPath)) blogFolderPaths.push(folderPath);
+                if (repoTreeState.items) {
+                    repoTreeState.items.push({ path: placeholder, type: 'file', size: 0 });
+                    const parts = folderPath.split('/');
+                    for (let i = 2; i <= parts.length; i++) {
+                        repoTreeState.items.push({ path: parts.slice(0, i).join('/'), type: 'folder', size: 0 });
+                    }
+                }
+                renderFileTree();
+                showToast(`已创建目录：/${folderPath}`);
+            } catch (error) {
+                console.error('新建博客目录失败:', error);
+                alert(`新建文件夹失败: ${error.message}`);
+            }
+        }
+
         // ==================== 资源栏（asserts 目录） ====================
 
         const RESOURCE_ROOT = 'asserts';
         let resourceTreeLoaded = false;
         let resourceRemotePaths = []; // [{ path, type }]，一次递归取树后的缓存
+        let blogFolderPaths = [];     // blog 目录下已有的子文件夹（来自同一次取树）
+        let repoTreeState = { items: null, loadedAt: 0 };
+        const REPO_TREE_TTL = 5 * 60 * 1000;
 
         function encodeRepoPathLocal(path) {
             return String(path || '').split('/').filter(Boolean).map(encodeURIComponent).join('/');
@@ -970,25 +1144,48 @@
             dom.resourceCommitBtn.disabled = count === 0;
         }
 
-        // 取 asserts 目录下的全部路径（公开仓库匿名也能读；Token 失效时自动降级）
-        async function loadResourcePaths() {
+        /**
+         * 一次性拉取整棵仓库树并缓存：资源栏、文件树、博客目录共用这一次结果，
+         * 避免每打开一次编辑页就再打一次 GitHub API。
+         * @param {boolean} force 是否强制刷新（刷新按钮 / 提交后手动同步时用）
+         */
+        async function loadRepoTreeOnce(force = false) {
+            if (!force && repoTreeState.items && (Date.now() - repoTreeState.loadedAt) < REPO_TREE_TTL) {
+                return repoTreeState.items;
+            }
+
             const token = getGithubToken();
             const repoInfo = { owner: config.owner, repo: config.repo, branch: config.branch };
-            const fetchPaths = async (auth) => {
+            const fetchTree = async (auth) => {
                 const octokit = createOctokit(auth);
-                const items = await listRepoPaths(octokit, repoInfo, RESOURCE_ROOT);
-                return items.filter(item => item.path !== RESOURCE_ROOT);
+                return listRepoPaths(octokit, repoInfo, '');
             };
 
+            let items;
             try {
-                return await fetchPaths(token);
+                items = await fetchTree(token);
             } catch (error) {
                 if (token && isAuthError(error)) {
-                    handleAuthFailure('GitHub Token 已失效（Bad credentials），资源栏已切换为匿名只读。');
-                    return await fetchPaths('');
+                    handleAuthFailure('GitHub Token 已失效（Bad credentials），已切换为匿名只读。');
+                    items = await fetchTree('');
+                } else {
+                    throw error;
                 }
-                throw error;
             }
+
+            repoTreeState = { items, loadedAt: Date.now() };
+            blogFolderPaths = items
+                .filter(item => item.type === 'folder' && item.path.startsWith('blog/'))
+                .map(item => item.path);
+            return items;
+        }
+
+        // 从仓库树缓存里取出 asserts 目录下的路径（公开仓库匿名也能读）
+        async function loadResourcePaths(force = false) {
+            const items = await loadRepoTreeOnce(force);
+            return items
+                .filter(item => item.path === RESOURCE_ROOT || item.path.startsWith(RESOURCE_ROOT + '/'))
+                .filter(item => item.path !== RESOURCE_ROOT);
         }
 
         // 把远端路径 + 待提交项合成一棵树
@@ -1147,15 +1344,15 @@
             updatePendingResourceBadge();
         }
 
-        // 渲染资源树
-        async function renderResourceTree() {
+        // 渲染资源树（默认走仓库树缓存，force 才重新请求 API）
+        async function renderResourceTree(force = false) {
             updatePendingResourceBadge();
 
             const token = getGithubToken();
             dom.resourceTree.innerHTML = '<div class="resource-loading"><i class="fa fa-spinner fa-spin"></i> 加载资源...</div>';
 
             try {
-                resourceRemotePaths = (await loadResourcePaths()) || [];
+                resourceRemotePaths = (await loadResourcePaths(force)) || [];
                 if (!token) {
                     // 匿名只读提示，放在树下方由 CSS 处理（不占树结构）
                     dom.resourceTree.dataset.anonymous = '1';
@@ -1165,10 +1362,13 @@
                 if (resourceRemotePaths.length === 0 && pendingResourceCount() === 0) {
                     resourceTreeLoaded = true;
                     dom.resourceTree.innerHTML = '<div class="resource-empty">资源目录为空</div>';
+                    renderFileTree();
                     return;
                 }
                 resourceTreeLoaded = true;
                 renderResourceTreeFromCache();
+                // 仓库树同时包含 blog 目录结构，顺手刷新左侧文件树的空目录
+                renderFileTree();
             } catch (error) {
                 console.error('加载资源目录失败:', error);
                 resourceTreeLoaded = false;
@@ -1179,9 +1379,9 @@
             }
         }
 
-        async function refreshResourceTree() {
+        async function refreshResourceTree(force = true) {
             resourceTreeLoaded = false;
-            await renderResourceTree();
+            await renderResourceTree(force);
         }
 
         // 复制路径（带兜底，避免非安全上下文下 clipboard 不可用）
@@ -1225,13 +1425,7 @@
             };
 
             dom.resUploadFile.onclick = () => {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.onchange = (event) => {
-                    const file = event.target.files[0];
-                    if (file) queueResourceFile(file, folderPath);
-                };
-                input.click();
+                pickResourceFiles(folderPath);
                 dom.resourceContextMenu.style.display = 'none';
             };
 
@@ -1270,6 +1464,25 @@
             };
         }
 
+        // 选择并上传资源文件（可多选）
+        function pickResourceFiles(folderPath = RESOURCE_ROOT) {
+            if (!getGithubToken()) {
+                alert('请先登录后再上传资源');
+                return;
+            }
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.accept = 'image/*,.md,.txt,.json,.pdf,.zip';
+            input.onchange = async (event) => {
+                const files = Array.from(event.target.files || []);
+                for (const file of files) {
+                    await queueResourceFile(file, folderPath);
+                }
+            };
+            input.click();
+        }
+
         // 加入待提交队列（真正提交由“提交资源”按钮或保存文章时触发）
         async function queueResourceFile(file, folderPath) {
             if (!getGithubToken()) {
@@ -1296,17 +1509,35 @@
             }
         }
 
-        function queueResourceFolder(parentPath, folderName) {
-            if (folderName.includes('/') || folderName.includes('\\')) {
-                alert('文件夹名不能包含斜杠');
+        // 在资源目录下新建文件夹（支持多级，如 images/2026）
+        function queueResourceFolder(parentPath, rawName) {
+            const name = String(rawName || '').trim().replace(/^\/+|\/+$/g, '');
+            if (!name) return;
+            if (/[\\<>:"|?*]/.test(name)) {
+                alert('文件夹名不能包含 \\ < > : " | ? *');
                 return;
             }
-            const folderPath = `${parentPath}/${folderName}`;
-            if (resourceRemotePaths.some(item => item.path === folderPath)) {
-                alert('该文件夹已存在');
+
+            const segments = name.split('/').map(s => s.trim()).filter(Boolean);
+            if (segments.length === 0 || segments.some(s => s === '.' || s === '..')) {
+                alert('文件夹名不合法');
                 return;
             }
-            pendingResourceFolders.set(folderPath, { name: folderName });
+
+            let cursor = parentPath;
+            for (let i = 0; i < segments.length; i++) {
+                cursor = `${cursor}/${segments[i]}`;
+                const isLast = i === segments.length - 1;
+                const remoteExists = resourceRemotePaths.some(item => item.path === cursor);
+                const pendingExists = pendingResourceFolders.has(cursor);
+
+                if ((remoteExists || pendingExists) && isLast) {
+                    alert(remoteExists ? '该文件夹已存在' : '该文件夹已在待提交队列中');
+                    return;
+                }
+                if (remoteExists || pendingExists) continue;
+                pendingResourceFolders.set(cursor, { name: segments[i] });
+            }
             renderResourceTreeFromCache();
         }
 
@@ -1426,6 +1657,8 @@
             });
 
             const fileCount = appendPendingResources(batch);
+            const committedFiles = Array.from(pendingResourceFiles.keys());
+            const committedFolders = Array.from(pendingResourceFolders.keys());
             dom.resourceCommitBtn.disabled = true;
             dom.resourceCommitBtn.textContent = '提交中...';
 
@@ -1434,7 +1667,22 @@
                 if (!result.success) throw new Error(result.error);
                 pendingResourceFiles.clear();
                 pendingResourceFolders.clear();
-                await refreshResourceTree();
+
+                // 只更新本地缓存，不再为刚提交的文件重新拉一次树
+                committedFiles.forEach(path => {
+                    if (!resourceRemotePaths.some(item => item.path === path)) {
+                        resourceRemotePaths.push({ path, type: 'file', size: 0 });
+                    }
+                    if (repoTreeState.items && !repoTreeState.items.some(item => item.path === path)) {
+                        repoTreeState.items.push({ path, type: 'file', size: 0 });
+                    }
+                });
+                committedFolders.forEach(path => {
+                    if (!resourceRemotePaths.some(item => item.path === path)) {
+                        resourceRemotePaths.push({ path, type: 'folder', size: 0 });
+                    }
+                });
+                renderResourceTreeFromCache();
                 alert('资源已提交');
                 return result;
             } catch (error) {
@@ -1547,7 +1795,7 @@
 
             currentBlog = blogInfo;
             switchToShow(blogInfo, dom);
-            loadBlogContent(blogInfo, dom, renderMarkdown);
+            loadBlogContent(blogInfo, dom, renderMarkdown, { content: blogContentCache.get(blogInfo.path) });
             loadCommitInfo(blogInfo);
         }
 
@@ -1634,6 +1882,29 @@
             }
         }
 
+        // 博客正文缓存：首次进入时并发预取一次，之后打开/切换标签都直接命中
+        const blogContentCache = new Map();
+
+        async function prefetchBlogContents() {
+            const queue = allBlogs.filter(blog => blog.path && !blogContentCache.has(blog.path));
+            if (queue.length === 0) return;
+            const worker = async () => {
+                while (queue.length > 0) {
+                    const blog = queue.shift();
+                    if (blogContentCache.has(blog.path)) continue;
+                    try {
+                        const res = await fetch(`${blog.path}?t=${Date.now()}`, { cache: 'no-store' });
+                        if (res.ok) {
+                            blogContentCache.set(blog.path, (await res.text()).replace(/\r\n?/g, '\n'));
+                        }
+                    } catch (error) {
+                        console.warn('预取博客正文失败:', blog.path, error);
+                    }
+                }
+            };
+            await Promise.all(Array.from({ length: Math.min(3, queue.length) }, () => worker()));
+        }
+
         // 初始化博客内容
         async function initBlog() {
             try {
@@ -1641,6 +1912,7 @@
                 if (!response.ok) throw new Error('配置文件加载失败');
                 
                 const blogConfig = await response.json();
+                blogConfigData = blogConfig;
                 await processBlogData(blogConfig);
                 dom.loadingEl.style.display = 'none';
             } catch (error) {
@@ -1680,6 +1952,13 @@
             renderTags();
             renderMonthList();
             renderBlogs();
+
+            // 首次进入时一次性预取：博客正文（纯静态文件，不消耗 API）；
+            // 仓库树只在已登录时预取，避免匿名用户宝贵的 60 次/小时额度被首页消耗
+            prefetchBlogContents();
+            if (getGithubToken()) {
+                loadRepoTreeOnce().catch(err => console.warn('预取仓库树失败:', err));
+            }
 
             // 异步加载commit信息
             loadCommitsAsync();
@@ -2224,10 +2503,28 @@
             });
 
             // 编辑内容变化时实时更新未保存状态
-            [dom.editTitle, dom.editTags, dom.editContent].forEach(el => {
+            [dom.editTitle, dom.editContent].forEach(el => {
                 el.addEventListener('input', () => {
                     if (activeTabId) snapshotActiveTab();
                 });
+            });
+
+            // 标签编辑器：回车/逗号添加，退格删除最后一个，失焦时把残留文字也加入
+            dom.editTags.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ',' || e.key === '，') {
+                    e.preventDefault();
+                    if (addEditorTag(dom.editTags.value)) dom.editTags.value = '';
+                    return;
+                }
+                if (e.key === 'Backspace' && dom.editTags.value === '' && editorTags.length > 0) {
+                    removeEditorTag(editorTags[editorTags.length - 1]);
+                }
+            });
+            dom.editTags.addEventListener('blur', () => {
+                if (addEditorTag(dom.editTags.value)) dom.editTags.value = '';
+            });
+            dom.tagEditor.addEventListener('click', (e) => {
+                if (e.target === dom.tagEditor || e.target === dom.tagChips) dom.editTags.focus();
             });
 
             // 保存编辑事件（新增/编辑：一次提交同时写入 md 与 blog-config.json）
@@ -2252,7 +2549,7 @@
                 snapshotActiveTab();
 
                 const title = dom.editTitle.value.trim();
-                const tags = parseTagsInput(dom.editTags.value);
+                const tags = getEditorTags();
                 const content = dom.editContent.value;
                 const isNew = tab.isNew;
 
@@ -2338,6 +2635,7 @@
                     }
 
                     // 4. 提交成功后同步本地状态
+                    blogConfigData = updated.config;
                     tab.isNew = false;
                     tab.blog.title = title;
                     tab.blog.tags = tags.slice();
@@ -2361,25 +2659,89 @@
                     originalContents.set(uuid, content);
                     dirtyTabs.delete(uuid);
                     currentEditFile = tab.blog;
+                    blogContentCache.set(filePath, content);
 
+                    const committedResourceFiles = Array.from(pendingResourceFiles.keys());
+                    const committedResourceFolders = Array.from(pendingResourceFolders.keys());
                     pendingResourceFiles.clear();
                     pendingResourceFolders.clear();
                     updatePendingResourceBadge();
-                    resourceTreeLoaded = false;
 
                     renderTabs();
                     showEditStatus(resourceCount > 0
                         ? `保存成功，同时提交了 ${resourceCount} 个资源文件`
                         : '保存成功！');
 
-                    // 5. 重新拉取列表，并展示刚保存的文章
-                    await initBlog();
-                    await refreshResourceTree();
+                    // 5. 用已提交的内容直接刷新界面：不再重新拉 blog-config.json / md，
+                    //    否则 GitHub Pages 的 CDN 缓存会让页面停在旧内容上。
+                    const blogObj = allBlogs.find(b => String(b.blog_uuid) === String(uuid) || b.path === filePath);
+                    const mergedBlog = blogObj || {};
+                    Object.assign(mergedBlog, {
+                        blog_uuid: uuid,
+                        uuid,
+                        title,
+                        description: updated.entry.description || title,
+                        path: filePath,
+                        filePath,
+                        tags: tags.slice(),
+                        group: updated.group
+                    });
+                    if (!blogObj) allBlogs.push(mergedBlog);
 
-                    currentBlog = allBlogs.find(b => String(b.uuid) === String(uuid) || b.path === filePath) || tab.blog;
-                    switchToShow(currentBlog, dom);
-                    loadBlogContent(currentBlog, dom, renderMarkdown);
-                    loadCommitInfo(currentBlog);
+                    mergedBlog.lastModified = new Date();
+                    mergedBlog.committer = dom.usernameDisplay.textContent.trim() || '我';
+                    mergedBlog.commitMessage = isNew ? `新增博客: ${title}` : `更新博客: ${title}`;
+                    currentBlog = mergedBlog;
+
+                    allTags.clear();
+                    allBlogs.forEach(b => (b.tags || []).forEach(t => allTags.add(t)));
+
+                    // 同步仓库树缓存，资源栏/文件树无需再打 API
+                    if (repoTreeState.items) {
+                        const addItem = (path, type) => {
+                            if (!repoTreeState.items.some(item => item.path === path)) {
+                                repoTreeState.items.push({ path, type, size: 0 });
+                            }
+                        };
+                        addItem(filePath, 'file');
+                        addItem('blog-config.json', 'file');
+                        const parts = filePath.split('/');
+                        for (let i = 2; i < parts.length; i++) {
+                            addItem(parts.slice(0, i).join('/'), 'folder');
+                        }
+                        committedResourceFiles.forEach(path => addItem(path, 'file'));
+                        committedResourceFolders.forEach(path => addItem(path, 'folder'));
+                        blogFolderPaths = repoTreeState.items
+                            .filter(item => item.type === 'folder' && item.path.startsWith('blog/'))
+                            .map(item => item.path);
+                    }
+                    committedResourceFiles.forEach(path => {
+                        if (!resourceRemotePaths.some(item => item.path === path)) {
+                            resourceRemotePaths.push({ path, type: 'file', size: 0 });
+                        }
+                    });
+                    committedResourceFolders.forEach(path => {
+                        if (!resourceRemotePaths.some(item => item.path === path)) {
+                            resourceRemotePaths.push({ path, type: 'folder', size: 0 });
+                        }
+                    });
+
+                    renderTags();
+                    renderMonthList();
+                    renderBlogs();
+
+                    // 直接展示编辑器里的最新内容，不经过静态站点缓存
+                    switchToShow(mergedBlog, dom);
+                    window.history.pushState({}, '', `${window.location.pathname}?opera=blog-show&uuid=${encodeURIComponent(uuid)}`);
+                    loadBlogContent(mergedBlog, dom, renderMarkdown, { content });
+                    displayCommitInfo({
+                        author: mergedBlog.committer,
+                        date: mergedBlog.lastModified,
+                        message: mergedBlog.commitMessage,
+                        sha: String(commitResult.commitSha || '').substring(0, 7)
+                    }, config.owner, config.repo, commitResult.commitSha);
+                    renderFileTree();
+                    renderResourceTreeFromCache();
                 } catch (error) {
                     console.error('保存失败:', error);
                     showEditStatus(`保存失败: ${error.message}`, true);
@@ -2538,6 +2900,25 @@
                 dom.resourceSearchClear.style.display = 'none';
             });
 
+            // 资源工具条：上传 / 新建文件夹
+            dom.resourceUploadBtn.addEventListener('click', () => {
+                pickResourceFiles(RESOURCE_ROOT);
+            });
+
+            dom.resourceNewFolderBtn.addEventListener('click', () => {
+                if (!getGithubToken()) {
+                    alert('请先登录后再新建文件夹');
+                    return;
+                }
+                const rawName = prompt('请输入资源文件夹名称：');
+                if (rawName && rawName.trim()) queueResourceFolder(RESOURCE_ROOT, rawName.trim());
+            });
+
+            // 左侧文件栏：在 blog 根目录下新建文件夹
+            dom.newBlogFolderBtn.addEventListener('click', () => {
+                createBlogFolder();
+            });
+
             // 提交待上传的资源
             dom.resourceCommitBtn.addEventListener('click', async () => {
                 await commitPendingResources();
@@ -2547,20 +2928,23 @@
         // 加载编辑界面的分组列表
         async function loadGroupsForEdit() {
             try {
-                const response = await fetch(`blog-config.json?t=${Date.now()}`, { cache: 'no-store' });
-                if (response.ok) {
-                    const config = await response.json();
-                    const groupSelect = document.getElementById('edit-group');
-                    groupSelect.innerHTML = '<option value="">请选择分组</option>';
-                    // 适配配置文件格式，博客数据在 blogs 字段下
-                    const blogs = config.blogs || config;
-                    Object.keys(blogs).forEach(group => {
-                        const option = document.createElement('option');
-                        option.value = group;
-                        option.textContent = group;
-                        groupSelect.appendChild(option);
-                    });
+                let config = blogConfigData;
+                if (!config) {
+                    const response = await fetch(`blog-config.json?t=${Date.now()}`, { cache: 'no-store' });
+                    if (!response.ok) return;
+                    config = await response.json();
+                    blogConfigData = config;
                 }
+                const groupSelect = document.getElementById('edit-group');
+                groupSelect.innerHTML = '<option value="">请选择分组</option>';
+                // 适配配置文件格式，博客数据在 blogs 字段下
+                const blogs = config.blogs || config;
+                Object.keys(blogs).forEach(group => {
+                    const option = document.createElement('option');
+                    option.value = group;
+                    option.textContent = group;
+                    groupSelect.appendChild(option);
+                });
             } catch (err) {
                 console.error('加载分组失败:', err);
             }

@@ -27,7 +27,8 @@ export function switchToShow(blog, dom) {
 }
 
 // 加载博客内容
-export function loadBlogContent(blog, dom, renderMarkdownFunc) {
+// options.content 可直接传入已加载的 Markdown（保存后立即刷新，避免再拉一次静态文件）
+export function loadBlogContent(blog, dom, renderMarkdownFunc, options = {}) {
     // 显示加载状态
     dom.showLoading.style.display = 'block';
     dom.showContent.style.display = 'none';
@@ -43,61 +44,69 @@ export function loadBlogContent(blog, dom, renderMarkdownFunc) {
         dom.showTags.appendChild(tagElement);
     });
 
-    // 加载并渲染内容
-    fetch(blog.path)
+    const renderMarkdownContent = (markdown) => {
+        const html = renderMarkdownFunc(markdown);
+        dom.showContent.innerHTML = html;
+
+        // 代码高亮
+        if (window.Prism) {
+            Prism.highlightAll();
+        }
+
+        // 渲染数学公式并等待完成后显示内容
+        const showContent = () => {
+            dom.showLoading.style.display = 'none';
+            dom.showContent.style.display = 'block';
+        };
+
+        if (window.MathJax) {
+            const renderMath = () => {
+                if (window.MathJax.typesetPromise) {
+                    return window.MathJax.typesetPromise([dom.showContent])
+                        .then(() => {
+                            showContent();
+                        })
+                        .catch(err => {
+                            console.warn('MathJax渲染警告:', err);
+                            showContent();
+                        });
+                }
+                showContent();
+                return Promise.resolve();
+            };
+
+            if (window.MathJax.startup && window.MathJax.startup.promise) {
+                window.MathJax.startup.promise
+                    .then(renderMath)
+                    .catch(err => {
+                        console.warn('MathJax初始化警告:', err);
+                        showContent();
+                    });
+            } else if (window.MathJax.typesetPromise) {
+                setTimeout(() => {
+                    renderMath();
+                }, 100);
+            } else {
+                showContent();
+            }
+        } else {
+            showContent();
+        }
+    };
+
+    if (typeof options.content === 'string') {
+        renderMarkdownContent(options.content);
+        return;
+    }
+
+    // 带时间戳，绕过 Pages/CDN 缓存，保证刚提交的文章也能读到新内容
+    fetch(`${blog.path}?t=${Date.now()}`, { cache: 'no-store' })
         .then(res => {
             if (!res.ok) throw new Error(`加载失败: ${res.statusText}`);
             return res.text();
         })
         .then(markdown => {
-            const html = renderMarkdownFunc(markdown);
-            dom.showContent.innerHTML = html;
-
-            // 代码高亮
-            if (window.Prism) {
-                Prism.highlightAll();
-            }
-
-            // 渲染数学公式并等待完成后显示内容
-            const showContent = () => {
-                dom.showLoading.style.display = 'none';
-                dom.showContent.style.display = 'block';
-            };
-
-            if (window.MathJax) {
-                const renderMath = () => {
-                    if (window.MathJax.typesetPromise) {
-                        return window.MathJax.typesetPromise([dom.showContent])
-                            .then(() => {
-                                showContent();
-                            })
-                            .catch(err => {
-                                console.warn('MathJax渲染警告:', err);
-                                showContent(); // 即使渲染失败也显示内容
-                            });
-                    }
-                    showContent();
-                    return Promise.resolve();
-                };
-
-                if (window.MathJax.startup && window.MathJax.startup.promise) {
-                    window.MathJax.startup.promise
-                        .then(renderMath)
-                        .catch(err => {
-                            console.warn('MathJax初始化警告:', err);
-                            showContent();
-                        });
-                } else if (window.MathJax.typesetPromise) {
-                    // 如果 startup 不存在但 typesetPromise 存在，延迟后使用
-                    setTimeout(() => {
-                        renderMath();
-                    }, 100);
-                } else {
-                    showContent();
-                }
-            } else {
-                showContent();
-            }
+            renderMarkdownContent(markdown);
         })
         .catch(err => {
             console.error('加载博客内容失败:', err);
