@@ -78,17 +78,9 @@ export function findBlogEntry(config, key = {}) {
     return null;
 }
 
-function assertSegment(value, label, options = {}) {
+function assertSegment(value, label) {
     const v = String(value ?? '').trim();
     if (!v) throw new Error(`${label}不能为空`);
-    if (options.allowSlash) {
-        // 分组允许映射到 blog 下的多级目录，但每一段仍必须合法
-        const parts = v.split('/');
-        if (v.includes('\\') || parts.some(part => !part || part === '.' || part === '..')) {
-            throw new Error(`${label}不合法：不能包含反斜杠，也不能有空段`);
-        }
-        return v;
-    }
     if (v.includes('/') || v.includes('\\')) throw new Error(`${label}不能包含斜杠`);
     return v;
 }
@@ -98,7 +90,7 @@ function assertSegment(value, label, options = {}) {
  *
  * @param {Object} config 现有配置对象
  * @param {Object} input
- * @param {string} input.group 分组名（新增必填；编辑时用于兜底）
+ * @param {string} input.group 分类名（单层，仅用于首页卡片分组；新增必填，编辑时用于兜底）
  * @param {string} input.title 标题
  * @param {string[]} [input.tags] 标签
  * @param {string} input.path 文件路径（相对仓库根，如 blog/grpc/x.md）
@@ -142,7 +134,7 @@ export function upsertBlogEntry(config, input) {
         return { config: cfg, action: 'updated', group, entry };
     }
 
-    const group = assertSegment(input.group, '分组', { allowSlash: true });
+    const group = assertSegment(input.group, '分类');
     if (!Array.isArray(cfg.blogs[group])) {
         cfg.blogs[group] = [];
     }

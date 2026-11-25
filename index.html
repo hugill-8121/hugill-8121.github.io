@@ -213,17 +213,22 @@
                     <div class="edit-form">
                         <h2 id="edit-form-title">编辑文章</h2>
 
-                        <!-- 分组选择（仅新增模式显示） -->
+                        <!-- 分类选择（仅新增模式显示；分类只用于首页卡片分组，不参与文件路径） -->
                         <div class="form-group" id="edit-group-group" style="display: none;">
-                            <label for="edit-group">分组 *</label>
+                            <label for="edit-group">分类 *</label>
                             <div class="group-row">
                                 <select id="edit-group" class="modal-input">
-                                    <option value="">请选择分组</option>
+                                    <option value="">请选择分类</option>
                                 </select>
                                 <button type="button" class="group-add-btn" id="new-category-btn" title="新增一个博客分类">
                                     <i class="fa fa-plus"></i> 新建分类
                                 </button>
                             </div>
+                        </div>
+                        <div class="form-group" id="edit-folder-group" style="display: none;">
+                            <label for="edit-folder" id="edit-folder-label">文件目录</label>
+                            <input type="text" id="edit-folder" class="modal-input" list="blog-folder-options" placeholder="可多级，如 底层/C++；留空则使用分类名">
+                            <datalist id="blog-folder-options"></datalist>
                         </div>
 
                         <div class="form-group">
@@ -256,6 +261,10 @@
                     <div class="resource-search">
                         <input type="text" id="resource-search-input" class="resource-search-input" placeholder="搜索资源...">
                         <button id="resource-search-clear" class="resource-search-clear" style="display: none;">×</button>
+                    </div>
+                    <div class="resource-target">
+                        <label for="resource-upload-folder">上传到</label>
+                        <select id="resource-upload-folder" class="resource-upload-folder"></select>
                     </div>
                     <div class="resource-toolbar">
                         <button type="button" id="resource-upload-btn" class="resource-tool-btn">
@@ -387,6 +396,9 @@
             // 新增blog相关
             addBlogItem: document.getElementById('add-blog-item'),
             newCategoryBtn: document.getElementById('new-category-btn'),
+            editGroup: document.getElementById('edit-group'),
+            editFolder: document.getElementById('edit-folder'),
+            editFolderList: document.getElementById('blog-folder-options'),
             // 时间过滤器相关
             monthList: document.getElementById('month-list'),
             dateStart: document.getElementById('date-start'),
@@ -401,6 +413,7 @@
             resourceSearchInput: document.getElementById('resource-search-input'),
             resourceSearchClear: document.getElementById('resource-search-clear'),
             resourceUploadBtn: document.getElementById('resource-upload-btn'),
+            resourceUploadFolder: document.getElementById('resource-upload-folder'),
             resourceNewFolderBtn: document.getElementById('resource-new-folder-btn'),
             fileContextMenu: document.getElementById('file-context-menu'),
             ctxCopyPath: document.getElementById('ctx-copy-path'),
@@ -508,19 +521,37 @@
             return confirm(`当前有 ${dirtyTabs.size} 个标签页存在未保存的修改，确定要${action}吗？未保存的内容将丢失。`);
         }
 
-        // 新增模式下直接创建一个分类（保存文章时随路径一起落库）
+        // 文章所在的 blog 目录（相对 blog/，多级用 / 连接）
+        function getBlogFolder(blog) {
+            if (!blog) return '';
+            if (blog.folder) return String(blog.folder).replace(/^blog\//, '').replace(/^\/+|\/+$/g, '');
+            const path = String(blog.path || '').replace(/^blog\//, '').replace(/\.md$/i, '');
+            const parts = path.split('/').filter(Boolean);
+            parts.pop();
+            return parts.join('/');
+        }
+
+        // 新增模式下直接创建一个分类（分类只用于首页卡片分组，不能包含 /）
         function createNewCategory() {
-            const raw = prompt('请输入新分类名称（可用 / 分多级，例如 底层/C++）：');
+            const raw = prompt('请输入新分类名称（分类只用于首页卡片分组，不能包含 /）：');
             if (raw === null) return;
 
-            const name = raw.trim().replace(/^\/+|\/+$/g, '');
+            const name = raw.trim();
             if (!name) return;
-            if (/[\\<>:"|?*]/.test(name) || name.split('/').some(part => !part || part === '.' || part === '..')) {
-                alert('分类名称不合法：不能包含 \\ < > : " | ? *，也不能有空段');
+            if (name.includes('/') || name.includes('\\')) {
+                alert('分类名称不能包含斜杠；如需多级目录，请填写“文件目录”');
+                return;
+            }
+            if (name === '.' || name === '..') {
+                alert('分类名称不合法');
+                return;
+            }
+            if (/[<>:"|?*]/.test(name)) {
+                alert('分类名称不能包含 < > : " | ? *');
                 return;
             }
 
-            const groupSelect = document.getElementById('edit-group');
+            const groupSelect = dom.editGroup;
             let option = Array.from(groupSelect.options).find(item => item.value === name);
             if (!option) {
                 option = new Option(name, name);
@@ -540,6 +571,8 @@
                 showEditContainer();
                 await loadGroupsForEdit();
                 document.getElementById('edit-group').value = existingDraft.blog.group || '';
+                dom.editFolder.value = existingDraft.blog.folder || '';
+                loadFoldersForEdit();
                 if (!resourceTreeLoaded) await renderResourceTree();
                 return;
             }
@@ -549,6 +582,7 @@
                 title: '',
                 tags: [],
                 group: '',
+                folder: '',
                 path: ''
             };
             await openFileInTab(draftBlog, true);
@@ -563,6 +597,10 @@
         function setEditFormMode(isNew) {
             document.getElementById('edit-form-title').textContent = isNew ? '新增博客' : '编辑文章';
             document.getElementById('edit-group-group').style.display = isNew ? 'block' : 'none';
+            document.getElementById('edit-folder-group').style.display = 'block';
+            document.getElementById('edit-folder-label').textContent = isNew ? '文件目录' : '文件目录（保存路径，不可修改）';
+            dom.editFolder.readOnly = !isNew;
+            dom.editFolder.title = isNew ? '' : '已有文章的文件路径不可修改';
             document.getElementById('save-edit').textContent = isNew ? '确认新增' : '保存修改';
         }
 
@@ -650,6 +688,10 @@
             await loadGroupsForEdit();
             const groupSelect = document.getElementById('edit-group');
             groupSelect.value = isNew ? '' : (blog.group || '');
+
+            // 分类与文件目录解耦：编辑已有文章时目录只读，新增时可自由填写多级目录
+            dom.editFolder.value = isNew ? (tabBlog.folder || '') : getBlogFolder(tabBlog);
+            loadFoldersForEdit();
 
             renderFileTree();
             if (!resourceTreeLoaded) await renderResourceTree();
@@ -741,6 +783,7 @@
             if (tab.isNew) {
                 const groupSelect = document.getElementById('edit-group');
                 if (groupSelect) tab.blog.group = groupSelect.value;
+                tab.blog.folder = dom.editFolder.value.trim();
             }
             tab.title = tab.blog.title || '(未命名)';
             updateDirtyState(activeTabId);
@@ -753,7 +796,7 @@
             const content = editedContents.get(tabId) ?? '';
             if (tab.isNew) {
                 return content.trim() !== '' || (tab.blog.title || '') !== '' || (tab.blog.tags || []).length > 0
-                    || (tab.blog.group || '') !== '';
+                    || (tab.blog.group || '') !== '' || (tab.blog.folder || '') !== '';
             }
 
             const originalContent = originalContents.get(tabId) ?? '';
@@ -795,6 +838,9 @@
                     if (groupSelect && activeTabId === tabId) groupSelect.value = tab.blog.group || '';
                 });
             }
+
+            dom.editFolder.value = tab.isNew ? (tab.blog.folder || '') : getBlogFolder(tab.blog);
+            loadFoldersForEdit();
 
             renderTabs();
             renderFileTree();
@@ -1114,21 +1160,14 @@
                 }
                 renderFileTree();
 
-                // 新目录要能立刻出现在“新增博客”的分组下拉；如果正开着新增草稿且还没选分组，直接选中它
-                const groupSelect = document.getElementById('edit-group');
-                if (groupSelect) {
-                    const previous = groupSelect.value;
-                    if (!Array.from(groupSelect.options).some(item => item.value === name)) {
-                        groupSelect.appendChild(new Option(name, name));
-                    }
-                    await loadGroupsForEdit();
-
-                    const activeTab = openTabs.find(tab => tab.id === activeTabId);
-                    if (activeTab && activeTab.isNew && (!previous || previous === name)) {
-                        groupSelect.value = name;
-                        groupSelect.dispatchEvent(new Event('change', { bubbles: true }));
-                    } else if (previous) {
-                        groupSelect.value = previous;
+                // 新目录只刷新“文件目录”候选，不进入分类下拉（分类与文件夹是两个概念）
+                loadFoldersForEdit();
+                const activeTab = openTabs.find(tab => tab.id === activeTabId);
+                if (activeTab && activeTab.isNew && dom.editFolder) {
+                    const previousFolder = dom.editFolder.value.trim();
+                    if (!previousFolder || previousFolder === name) {
+                        dom.editFolder.value = name;
+                        dom.editFolder.dispatchEvent(new Event('input', { bubbles: true }));
                     }
                 }
                 showToast(`已创建目录：/${folderPath}`);
@@ -1144,8 +1183,49 @@
         let resourceTreeLoaded = false;
         let resourceRemotePaths = []; // [{ path, type }]，一次递归取树后的缓存
         let blogFolderPaths = [];     // blog 目录下已有的子文件夹（来自同一次取树）
+        let resourceUploadTarget = RESOURCE_ROOT; // 资源上传目标文件夹
         let repoTreeState = { items: null, loadedAt: 0 };
         const REPO_TREE_TTL = 5 * 60 * 1000;
+
+        // 刷新“上传到”下拉：根目录 + 远端所有资源文件夹 + 待创建文件夹
+        function refreshResourceUploadFolders() {
+            const select = dom.resourceUploadFolder;
+            if (!select) return;
+
+            const folders = new Set([RESOURCE_ROOT]);
+            const addFolder = path => {
+                if (path && (path === RESOURCE_ROOT || path.startsWith(RESOURCE_ROOT + '/'))) folders.add(path);
+            };
+
+            resourceRemotePaths.forEach(item => {
+                if (item.type === 'folder') {
+                    addFolder(item.path);
+                } else {
+                    // 兜底：从文件路径反推父目录（远端树偶尔没有显式 folder 项）
+                    const parts = String(item.path || '').split('/').filter(Boolean);
+                    for (let i = 1; i < parts.length; i++) {
+                        addFolder(parts.slice(0, i).join('/'));
+                    }
+                }
+            });
+            pendingResourceFolders.forEach((meta, path) => addFolder(path));
+
+            const sorted = Array.from(folders).sort((a, b) => {
+                if (a === RESOURCE_ROOT) return -1;
+                if (b === RESOURCE_ROOT) return 1;
+                return a.localeCompare(b, 'zh');
+            });
+
+            const desired = resourceUploadTarget || select.value || RESOURCE_ROOT;
+            select.innerHTML = '';
+            sorted.forEach(path => {
+                const label = path === RESOURCE_ROOT ? `${RESOURCE_ROOT}（根目录）` : path;
+                select.appendChild(new Option(label, path));
+            });
+
+            resourceUploadTarget = sorted.includes(desired) ? desired : RESOURCE_ROOT;
+            select.value = resourceUploadTarget;
+        }
 
         function encodeRepoPathLocal(path) {
             return String(path || '').split('/').filter(Boolean).map(encodeURIComponent).join('/');
@@ -1215,6 +1295,7 @@
             blogFolderPaths = items
                 .filter(item => item.type === 'folder' && item.path.startsWith('blog/'))
                 .map(item => item.path);
+            loadFoldersForEdit();
             return items;
         }
 
@@ -1380,11 +1461,13 @@
             renderResourceNode(tree);
             syncResourceVisibility();
             updatePendingResourceBadge();
+            refreshResourceUploadFolders();
         }
 
         // 渲染资源树（默认走仓库树缓存，force 才重新请求 API）
         async function renderResourceTree(force = false) {
             updatePendingResourceBadge();
+            refreshResourceUploadFolders();
 
             const token = getGithubToken();
             dom.resourceTree.innerHTML = '<div class="resource-loading"><i class="fa fa-spinner fa-spin"></i> 加载资源...</div>';
@@ -1521,6 +1604,20 @@
             input.click();
         }
 
+        // 读取文件为 Base64（去掉 data URL 前缀）
+        function readFileAsBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const result = String(reader.result || '');
+                    const comma = result.indexOf(',');
+                    resolve(comma >= 0 ? result.slice(comma + 1) : result);
+                };
+                reader.onerror = () => reject(reader.error || new Error('读取文件失败'));
+                reader.readAsDataURL(file);
+            });
+        }
+
         // 加入待提交队列（真正提交由“提交资源”按钮或保存文章时触发）
         async function queueResourceFile(file, folderPath) {
             if (!getGithubToken()) {
@@ -1576,6 +1673,8 @@
                 if (remoteExists || pendingExists) continue;
                 pendingResourceFolders.set(cursor, { name: segments[i] });
             }
+            // 新建完成后把上传目标切到该文件夹，方便直接往里传
+            resourceUploadTarget = cursor;
             renderResourceTreeFromCache();
         }
 
@@ -1816,6 +1915,7 @@
                 }
 
                 bindEvents();
+                refreshResourceUploadFolders();
             } catch (error) {
                 console.error('初始化失败:', error);
                 dom.loadingEl.innerHTML = `<p style="color: red;">加载失败: ${error.message}</p>`;
@@ -2575,6 +2675,9 @@
             document.getElementById('edit-group').addEventListener('change', () => {
                 if (activeTabId) snapshotActiveTab();
             });
+            dom.editFolder.addEventListener('input', () => {
+                if (activeTabId) snapshotActiveTab();
+            });
             dom.newCategoryBtn.addEventListener('click', createNewCategory);
 
             // 保存编辑事件（新增/编辑：一次提交同时写入 md 与 blog-config.json）
@@ -2613,21 +2716,31 @@
                 }
 
                 let group = '';
+                let folder = '';
                 if (isNew) {
-                    group = document.getElementById('edit-group').value.trim().replace(/^\/+|\/+$/g, '');
+                    group = dom.editGroup.value.trim();
                     if (!group) {
-                        showEditStatus('请选择分组', true);
+                        showEditStatus('请选择分类', true);
                         return;
                     }
-                    // 允许 blog 下的多级目录作为分组，但每一段都必须合法
-                    if (/[\\<>:"|?*]/.test(group) || group.split('/').some(part => !part || part === '.' || part === '..')) {
-                        showEditStatus('分组名称不合法（不能含 \\ < > : " | ? *，也不能有空段）', true);
+                    // 分类只用于首页卡片分组，必须是单层的纯标识，不能带 /
+                    if (group.includes('/') || group.includes('\\')) {
+                        showEditStatus('分类名称不能包含斜杠；多级目录请填写“文件目录”', true);
+                        return;
+                    }
+
+                    // 文件目录独立于分类，允许多级
+                    folder = dom.editFolder.value.trim().replace(/^\/+|\/+$/g, '');
+                    if (folder.toLowerCase().startsWith('blog/')) folder = folder.slice(5);
+                    if (!folder) folder = group;
+                    if (/[\\<>:"|?*]/.test(folder) || folder.split('/').some(part => !part || part === '.' || part === '..')) {
+                        showEditStatus('文件目录不合法（不能含 \\ < > : " | ? *，也不能有空段）', true);
                         return;
                     }
                 }
 
                 const filePath = isNew
-                    ? `blog/${group}/${title}.md`
+                    ? `blog/${folder}/${title}.md`
                     : (tab.blog.path || '');
                 if (!filePath) {
                     showEditStatus('找不到文件路径', true);
@@ -2639,7 +2752,7 @@
                     const pathExists = allBlogs.some(blog => blog.path === filePath)
                         || (repoTreeState.items || []).some(item => item.type === 'file' && item.path === filePath);
                     if (pathExists) {
-                        showEditStatus('该分组下已存在同名文章，请修改标题', true);
+                        showEditStatus('该目录下已存在同名文章，请修改标题或文件目录', true);
                         return;
                     }
                 }
@@ -2664,7 +2777,7 @@
                         : ((existing && existing.group) || tab.blog.group || currentEditFile?.group || '');
 
                     if (!isNew && !targetGroup) {
-                        throw new Error('blog-config.json 中找不到该文章的分组，请检查配置');
+                        throw new Error('blog-config.json 中找不到该文章的分类，请检查配置');
                     }
 
                     const updated = upsertBlogEntry(remote.config, {
@@ -2701,6 +2814,7 @@
                     tab.blog.title = title;
                     tab.blog.tags = tags.slice();
                     tab.blog.path = filePath;
+                    tab.blog.folder = folder || getBlogFolder({ path: filePath });
                     tab.blog.blog_uuid = uuid;
                     tab.blog.uuid = uuid;
                     tab.blog.group = updated.group;
@@ -2744,6 +2858,7 @@
                         description: updated.entry.description || title,
                         path: filePath,
                         filePath,
+                        folder: folder || getBlogFolder({ path: filePath }),
                         tags: tags.slice(),
                         group: updated.group
                     });
@@ -2972,8 +3087,13 @@
             });
 
             // 资源工具条：上传 / 新建文件夹
+            dom.resourceUploadFolder.addEventListener('change', () => {
+                resourceUploadTarget = dom.resourceUploadFolder.value || RESOURCE_ROOT;
+            });
+
             dom.resourceUploadBtn.addEventListener('click', () => {
-                pickResourceFiles(RESOURCE_ROOT);
+                const target = dom.resourceUploadFolder.value || RESOURCE_ROOT;
+                pickResourceFiles(target);
             });
 
             dom.resourceNewFolderBtn.addEventListener('click', () => {
@@ -2996,7 +3116,7 @@
             });
         }
 
-        // 加载编辑界面的分组列表
+        // 加载编辑界面的分类列表（分类只来自配置/文章，不包含 blog 目录）
         async function loadGroupsForEdit() {
             try {
                 let config = blogConfigData;
@@ -3008,15 +3128,11 @@
                 }
                 const groupSelect = document.getElementById('edit-group');
                 const previous = groupSelect.value;
-                groupSelect.innerHTML = '<option value="">请选择分组</option>';
+                groupSelect.innerHTML = '<option value="">请选择分类</option>';
 
-                // 分组候选 = 配置文件里的分组 + blog 下实际存在的文件夹 + 已加载博客的分组
+                // 分类候选 = 配置文件里的分类 + 已加载文章的分类
                 const blogs = config.blogs || config;
                 const groups = new Set(Object.keys(blogs));
-                (blogFolderPaths || []).forEach(path => {
-                    const relative = String(path || '').replace(/^blog\//, '');
-                    if (relative) groups.add(relative);
-                });
                 allBlogs.forEach(blog => {
                     if (blog.group) groups.add(blog.group);
                 });
@@ -3034,8 +3150,30 @@
 
                 if (previous && groups.has(previous)) groupSelect.value = previous;
             } catch (err) {
-                console.error('加载分组失败:', err);
+                console.error('加载分类失败:', err);
             }
+        }
+
+        // 加载“文件目录”候选：blog 下真实存在的多级目录 + 已有文章目录 + 草稿目录
+        function loadFoldersForEdit() {
+            if (!dom.editFolderList) return;
+            const folders = new Set();
+            (blogFolderPaths || []).forEach(path => {
+                const relative = String(path || '').replace(/^blog\//, '').replace(/^\/+|\/+$/g, '');
+                if (relative) folders.add(relative);
+            });
+            allBlogs.forEach(blog => {
+                const folder = getBlogFolder(blog);
+                if (folder) folders.add(folder);
+            });
+            openTabs.forEach(tab => {
+                if (tab.isNew && tab.blog.folder) folders.add(tab.blog.folder);
+            });
+
+            dom.editFolderList.innerHTML = '';
+            Array.from(folders).sort((a, b) => a.localeCompare(b, 'zh')).forEach(folder => {
+                dom.editFolderList.appendChild(new Option(folder, folder));
+            });
         }
 
 
