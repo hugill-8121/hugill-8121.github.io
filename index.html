@@ -1463,7 +1463,7 @@
             };
 
             dom.resNewFolder.onclick = () => {
-                const rawName = prompt('请输入文件夹名称：');
+                const rawName = prompt('请输入资源文件夹名称（支持多级，如 images/2026）：');
                 dom.resourceContextMenu.style.display = 'none';
                 if (rawName && rawName.trim()) queueResourceFolder(folderPath, rawName.trim());
             };
@@ -2972,7 +2972,7 @@
                     alert('请先登录后再新建文件夹');
                     return;
                 }
-                const rawName = prompt('请输入资源文件夹名称：');
+                const rawName = prompt('请输入资源文件夹名称（支持多级，如 images/2026）：');
                 if (rawName && rawName.trim()) queueResourceFolder(RESOURCE_ROOT, rawName.trim());
             });
 
