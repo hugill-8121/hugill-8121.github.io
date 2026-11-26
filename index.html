@@ -98,7 +98,7 @@
                         <i class="fa fa-folder-plus"></i> 新建
                     </button>
                 </div>
-                <p class="resource-upload-hint" id="resource-upload-hint">目标：assets/images（根目录）</p>
+                <p class="resource-upload-hint" id="resource-upload-hint">目标：media（根目录）</p>
             </div>
             <div class="modal-actions">
                 <button type="button" class="btn-cancel" id="resource-upload-cancel">取消</button>
@@ -320,7 +320,7 @@
                     <div class="resource-tree" id="resource-tree">
                         <!-- 资源树将动态生成 -->
                     </div>
-                    <div class="resource-drag-hint">拖动文件到文件夹上可移动位置；拖到资源树空白处移到 <code>assets/images</code> 根目录</div>
+                    <div class="resource-drag-hint">拖动文件到文件夹上可移动位置；拖到资源树空白处移到 <code>media</code> 根目录</div>
                 </div>
             </div>
         </div>
@@ -1343,9 +1343,9 @@
             }
         }
 
-        // ==================== 资源栏（assets/images 目录） ====================
+        // ==================== 资源栏（media 目录） ====================
 
-        const RESOURCE_ROOT = 'assets/images';
+        const RESOURCE_ROOT = 'media';
         let resourceTreeLoaded = false;
         let resourceRemotePaths = []; // [{ path, type }]，一次递归取树后的缓存
         let blogFolderPaths = [];     // blog 目录下已有的子文件夹（来自同一次取树）

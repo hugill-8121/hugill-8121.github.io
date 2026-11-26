@@ -278,7 +278,7 @@ async function fetchRepoFileText(octokit, repoInfo, path) {
  * 列出仓库某个目录下的全部路径（一次递归取树，避免逐层请求打满限流）
  * @param {Octokit} octokit
  * @param {{owner:string, repo:string, branch:string}} repoInfo
- * @param {string} [subPath] 限定目录，如 'assets/images'
+ * @param {string} [subPath] 限定目录，如 'media'
  * @returns {Promise<Array<{path:string, type:'file'|'folder', size:number}>>}
  */
 async function listRepoPaths(octokit, repoInfo, subPath = '') {
