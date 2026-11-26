@@ -269,6 +269,12 @@
                             <label for="edit-content">文章内容（Markdown）</label>
                             <textarea id="edit-content" class="modal-textarea" style="height: 400px;"></textarea>
                         </div>
+                        <div class="form-group">
+                            <label class="checkbox-row" for="edit-hidden">
+                                <input type="checkbox" id="edit-hidden" class="checkbox-input">
+                                <span>在主页隐藏（不在博客列表卡片中显示，左侧文件栏仍可打开）</span>
+                            </label>
+                        </div>
                         <!-- 自定义提交信息：留空时使用默认（新增博客: 标题 / 更新博客: 标题），占位符实时显示默认值 -->
                         <div class="form-group">
                             <label for="edit-commit-message">提交信息（commit message）</label>
@@ -399,6 +405,7 @@
             tagChips: document.getElementById('tag-chips'),
             tagEditor: document.getElementById('tag-editor'),
             editContent: document.getElementById('edit-content'),
+            editHidden: document.getElementById('edit-hidden'),
             editStatus: document.getElementById('edit-status'),
             // 按钮
             backToList: document.getElementById('back-to-list'),
@@ -715,6 +722,7 @@
             renderEditorTags(tabBlog.tags || []);
             dom.editTags.value = '';
             dom.editContent.value = content;
+            dom.editHidden.checked = !!tabBlog.hidden;
             dom.editCommitMessage.value = '';
             updateCommitMessagePlaceholder();
 
@@ -874,6 +882,7 @@
             editedContents.set(activeTabId, dom.editContent.value);
             tab.blog.title = dom.editTitle.value.trim();
             tab.blog.tags = getEditorTags();
+            tab.blog.hidden = dom.editHidden.checked;
             // 自定义提交信息随标签页保存，切换标签后不丢；不计入脏标记
             tab.commitMessage = String(dom.editCommitMessage?.value || '').trim();
             if (tab.isNew) {
@@ -926,6 +935,7 @@
             renderEditorTags(tab.blog.tags || []);
             dom.editTags.value = '';
             dom.editContent.value = editedContents.get(tabId) ?? '';
+            dom.editHidden.checked = !!tab.blog.hidden;
             dom.editCommitMessage.value = tab.commitMessage || '';
             updateCommitMessagePlaceholder();
             currentEditFile = tab.blog;
@@ -2452,7 +2462,7 @@
                         blog.uuid = blog.blog_uuid || blog.uuid; // 兼容不同字段名
                         blog.filePath = blog.path; // 兼容现有配置
                         allBlogs.push(blog);
-                        if (Array.isArray(blog.tags)) {
+                        if (!blog.hidden && Array.isArray(blog.tags)) {
                             blog.tags.forEach(tag => allTags.add(tag));
                         }
                     });
@@ -2677,10 +2687,11 @@
 
             dom.blogContainer.innerHTML = '';
 
-            // 应用标签过滤（多选：命中任一选中标签即可，与月份多选保持一致）
-            let filteredBlogs = selectedTags.size > 0
-                ? allBlogs.filter(blog => (blog.tags || []).some(tag => selectedTags.has(tag)))
-                : allBlogs;
+            // 先排除主页隐藏的文章，再应用标签过滤（多选：命中任一选中标签即可，与月份多选保持一致）
+            let filteredBlogs = allBlogs.filter(blog => !blog.hidden);
+            filteredBlogs = selectedTags.size > 0
+                ? filteredBlogs.filter(blog => (blog.tags || []).some(tag => selectedTags.has(tag)))
+                : filteredBlogs;
 
             // 应用月份过滤
             if (selectedMonths.size > 0) {
@@ -2757,9 +2768,10 @@
             console.log('渲染月份列表，allBlogs数量:', allBlogs.length);
             console.log('allBlogs:', allBlogs);
 
-            // 统计每个月的博客数量
+            // 统计每个月的博客数量（主页隐藏的文章不计入月份筛选）
             const monthStats = new Map();
             allBlogs.forEach(blog => {
+                if (blog.hidden) return;
                 if (blog.lastModified) {
                     const monthKey = getMonthKey(blog.lastModified);
                     monthStats.set(monthKey, (monthStats.get(monthKey) || 0) + 1);
@@ -3183,6 +3195,7 @@
                         tags,
                         path: filePath,
                         uuid,
+                        hidden: dom.editHidden.checked,
                         mode: isNew ? 'create' : 'update'
                     });
                     const configText = serializeBlogConfig(updated.config);
@@ -3210,6 +3223,7 @@
                     tab.isNew = false;
                     tab.blog.title = title;
                     tab.blog.tags = tags.slice();
+                    tab.blog.hidden = dom.editHidden.checked;
                     tab.blog.path = filePath;
                     tab.blog.folder = folder || getBlogFolder({ path: filePath });
                     tab.blog.blog_uuid = uuid;
@@ -3258,7 +3272,8 @@
                         filePath,
                         folder: folder || getBlogFolder({ path: filePath }),
                         tags: tags.slice(),
-                        group: updated.group
+                        group: updated.group,
+                        hidden: dom.editHidden.checked
                     });
                     if (!blogObj) allBlogs.push(mergedBlog);
 
@@ -3268,7 +3283,7 @@
                     currentBlog = mergedBlog;
 
                     allTags.clear();
-                    allBlogs.forEach(b => (b.tags || []).forEach(t => allTags.add(t)));
+                    allBlogs.forEach(b => { if (!b.hidden) (b.tags || []).forEach(t => allTags.add(t)); });
 
                     // 同步仓库树缓存，资源栏/文件树无需再打 API
                     if (repoTreeState.items) {

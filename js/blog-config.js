@@ -4,7 +4,7 @@
  * 配置文件结构：
  * {
  *   browser_tag, web_title, web_introduction, web_icon,
- *   blogs: { <group>: [ { blog_uuid, title, description, path, tags } ] }
+ *   blogs: { <group>: [ { blog_uuid, title, description, path, tags, hidden } ] }
  * }
  */
 
@@ -96,6 +96,7 @@ function assertSegment(value, label) {
  * @param {string} input.path 文件路径（相对仓库根，如 blog/grpc/x.md）
  * @param {string|number} [input.uuid] blog_uuid（编辑时传入原值，新增时传入新生成值）
  * @param {string} [input.description] 描述（不传则沿用旧值 / 新增时取标题）
+ * @param {boolean} [input.hidden] 是否在主页卡片中隐藏（不传：新增默认 false；编辑保留原值）
  * @param {'create'|'update'} [input.mode='update'] create 时同路径视为冲突并报错
  * @returns {{config: Object, action: 'added'|'updated', group: string, entry: Object}}
  */
@@ -111,6 +112,7 @@ export function upsertBlogEntry(config, input) {
         : [];
 
     const mode = input.mode === 'create' ? 'create' : 'update';
+    const hidden = input.hidden === undefined ? undefined : !!input.hidden;
     const hasUuid = input.uuid !== undefined && input.uuid !== null && input.uuid !== '';
     const matchedByUuid = hasUuid ? findBlogEntry(cfg, { uuid: input.uuid }) : null;
     const matchedByPath = findBlogEntry(cfg, { path });
@@ -131,6 +133,7 @@ export function upsertBlogEntry(config, input) {
             entry.description = title;
         }
         if (!entry.path) entry.path = path;
+        if (hidden !== undefined) entry.hidden = hidden;
         return { config: cfg, action: 'updated', group, entry };
     }
 
@@ -143,7 +146,8 @@ export function upsertBlogEntry(config, input) {
         title,
         description: input.description || title,
         path,
-        tags: tags.length > 0 ? tags : ['未分类']
+        tags: tags.length > 0 ? tags : ['未分类'],
+        hidden: !!input.hidden
     };
     cfg.blogs[group].push(entry);
     return { config: cfg, action: 'added', group, entry };
