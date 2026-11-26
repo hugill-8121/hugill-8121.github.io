@@ -46,7 +46,8 @@
 │        │  ├─ editor.js         编辑区：标签页、表单快照/脏标记、标签 chip、分类目录候选
 │        │  ├─ file-tree.js      左侧文件栏（blog 目录树）
 │        │  ├─ resource-tree.js  资源栏视图：树渲染、拖拽移动/重命名、右键菜单、搜索
-│        │  └─ host.js           图床：media/ 上传、直链复制、图墙浏览、删除
+│        │  ├─ host.js           图床：media/ 上传、直链复制、图墙浏览、删除
+│        │  └─ footer.js         底部个人介绍栏（读 blog-config.json 的 profile）
 │        └─ events/      事件绑定，按区域拆开
 │           ├─ nav.js      导航、登录菜单、API 限额、时间筛选
 │           ├─ editor.js   编辑表单与保存流程
@@ -138,6 +139,16 @@
 - **删除**：一次 `图床删除: <路径>` 提交；Pages 重建后该外链变 404，引用它的站外页面会失效，删前会提示。
 - **生效延迟**：新上传的文件要等 GitHub Pages 重建（通常几十秒）才能访问；期间直链可能先返回 404。
 
+### 底部个人介绍栏
+
+页面最下方固定一块自我介绍，内容全部来自 `blog-config.json` 的 `profile` 字段，改配置即可，不用动代码；没有配 `profile.name` 时整块隐藏。
+
+- 左侧圆形头像（`profile.avatar`，站内相对路径或 `http(s)` 都行，加载失败自动回退成默认人形图标）；
+- 显示名（`profile.name`）、一句话简介（`profile.bio`，纯文本，支持换行）；
+- 社交链接胶囊：`profile.links[]`，每项 `{ label, url, icon }`，`icon` 用 Font Awesome 类名（如 `fa-github`、`fa-envelope-o`）；只允许 `http(s)` 与 `mailto:`，其他协议会被丢弃；
+- 底部小字 `profile.note`，支持 `{year}` 占位，渲染时替换成当前年份；
+- 首页、详情页、编辑页都常驻显示（在三个容器之外），内容在 640px 以下自动改为竖向居中排列。
+
 ## 写仓库的机制
 
 `assets/js/lib/github-api.js` 里的 `CommitBatch` 负责所有写操作：
@@ -157,6 +168,15 @@
   "web_title": "云风青的技术博客",
   "web_introduction": "欢迎来到云风青的blog！这里分享技术心得和学习笔记",
   "web_icon": "assets/images/favicon.svg",
+  "profile": {
+    "name": "云风青",
+    "avatar": "assets/images/favicon.svg",
+    "bio": "后端 / 底层开发，写 C/C++、密码学与数据库迁移的那些事。",
+    "links": [
+      { "label": "GitHub", "url": "https://github.com/hugill-8121", "icon": "fa-github" }
+    ],
+    "note": "© {year} 云风青 · 本站由 GitHub Pages 托管"
+  },
   "blogs": {
     "分类名": [
       {
@@ -176,6 +196,7 @@
 - `blog_uuid` 是文章身份标识（数字或 UUID 字符串都可以），编辑时不变。
 - `path` 是仓库内真实路径，必须与 `blog/` 下的文件一致。
 - `hidden` 可选，缺省视为不隐藏。
+- `profile` 是底部个人介绍栏的数据源，字段见上文“底部个人介绍栏”；保存文章/提交显示状态时该字段原样保留，不会被覆盖。
 
 ## 已知限制与待办
 

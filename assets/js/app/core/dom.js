@@ -108,5 +108,13 @@ export const dom = {
     hostGrid: document.getElementById('host-grid'),
     hostEmpty: document.getElementById('host-empty'),
     hostCount: document.getElementById('host-count'),
-    hostStatus: document.getElementById('host-status')
+    hostStatus: document.getElementById('host-status'),
+    // 底部个人介绍栏
+    siteFooter: document.getElementById('site-footer'),
+    footerAvatar: document.getElementById('footer-avatar'),
+    footerAvatarFallback: document.getElementById('footer-avatar-fallback'),
+    footerName: document.getElementById('footer-name'),
+    footerBio: document.getElementById('footer-bio'),
+    footerLinks: document.getElementById('footer-links'),
+    footerMeta: document.getElementById('footer-meta')
 };

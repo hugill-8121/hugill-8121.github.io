@@ -5,6 +5,7 @@ import { dom } from '../core/dom.js';
 import { getGithubToken, setPageFavicon } from '../core/utils.js';
 import { loadRepoTreeOnce } from '../data/repo-tree.js';
 import { batchGetFileCommits } from '../../lib/github-api.js';
+import { renderSiteFooter } from './footer.js';
 
 // 加载博客配置
 export async function loadBlogSettings() {
@@ -33,6 +34,10 @@ export async function loadBlogSettings() {
             state.siteFavicon = String(cfg.web_icon).trim();
             setPageFavicon(state.siteFavicon);
         }
+
+        // 底部个人介绍栏：内容取自 profile 字段，没配就保持隐藏
+        state.siteProfile = (cfg.profile && typeof cfg.profile === 'object') ? cfg.profile : null;
+        renderSiteFooter();
     } catch (err) {
         console.warn('加载博客配置失败，使用默认值:', err);
         // 使用默认值

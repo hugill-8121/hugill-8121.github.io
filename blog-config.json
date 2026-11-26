@@ -3,6 +3,24 @@
   "web_title": "云风青的技术博客",
   "web_introduction": "欢迎来到云风青的blog！这里分享技术心得和学习笔记",
   "web_icon": "assets/images/favicon.svg",
+  "profile": {
+    "name": "云风青",
+    "avatar": "assets/images/favicon.svg",
+    "bio": "后端 / 底层开发，写 C/C++、密码学与数据库迁移的那些事，顺手记点踩坑笔记。",
+    "links": [
+      {
+        "label": "GitHub",
+        "url": "https://github.com/hugill-8121",
+        "icon": "fa-github"
+      },
+      {
+        "label": "站点仓库",
+        "url": "https://github.com/hugill-8121/hugill-8121.github.io",
+        "icon": "fa-code-fork"
+      }
+    ],
+    "note": "© {year} 云风青 · 本站由 GitHub Pages 托管"
+  },
   "blogs": {
     "grpc": [
       {

@@ -46,4 +46,5 @@ export const state = {
     resourceDragState: null,       // { path, pending, moved }
 
     siteFavicon: DEFAULT_FAVICON,  // 站点图标，loadBlogSettings 读到 web_icon 后更新
+    siteProfile: null,             // 底部个人介绍栏内容（blog-config.json 的 profile 字段）
 };
