@@ -1508,30 +1508,6 @@ h1 {
 }
 
 /* 图床面板：media/ 的对外直链 */
-.header-tools {
-    position: absolute;
-    top: 0;
-    left: 0;
-    padding: 0.5rem;
-}
-
-.header-tool-btn {
-    border: 1px solid #e5e7eb;
-    background: #fff;
-    color: #374151;
-    border-radius: 6px;
-    padding: 0.4rem 0.75rem;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.header-tool-btn:hover {
-    border-color: #3b82f6;
-    color: #2563eb;
-    background: #eff6ff;
-}
-
 .host-modal {
     position: fixed;
     inset: 0;

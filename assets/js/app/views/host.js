@@ -431,7 +431,12 @@ export function closeHostPanel() {
 export function bindHostEvents() {
     if (!dom.hostModal || !dom.openHostBtn) return;
 
-    dom.openHostBtn.addEventListener('click', openHostPanel);
+    // 入口在头像下拉菜单里：点完先收起菜单，再打开面板
+    dom.openHostBtn.addEventListener('click', event => {
+        event.stopPropagation();
+        dom.loginMenu.classList.remove('show');
+        openHostPanel();
+    });
     dom.hostClose.addEventListener('click', closeHostPanel);
     dom.hostModal.addEventListener('click', event => {
         if (event.target === dom.hostModal) closeHostPanel();
