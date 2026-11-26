@@ -2,7 +2,7 @@
   "browser_tag": "云风青的技术博客",
   "web_title": "云风青的技术博客",
   "web_introduction": "欢迎来到云风青的blog！这里分享技术心得和学习笔记",
-  "web_icon": "favicon2.svg",
+  "web_icon": "web/asserts/favicon.svg",
   "blogs": {
     "grpc": [
       {
