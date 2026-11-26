@@ -356,7 +356,6 @@
             fetchRepoFileText,
             listRepoPaths,
             CommitBatch,
-            deleteRepoFiles,
             sanitizeToken,
             isAuthError
         } from './js/github-api.js';
@@ -561,6 +560,9 @@
         // 待提交的资源移动/重命名（key: 仓库里的原路径, value: { path: 目标路径, sha, size }）
         // 拖拽或重命名只登记到这里，点“提交资源”时随批次一次提交
         let pendingResourceMoves = new Map();
+        // 待提交的资源删除（key: 远端文件路径, value: { name, size, sha }）
+        // 删除只登记到这里，点“提交资源”时随批次一次删除
+        let pendingResourceDeletes = new Map();
         // 文件栏批量显示状态变更（key: 文章仓库路径, value: 目标 hidden 布尔值）
         // 勾选只登记到这里，点“提交显示状态”时一次性写回 blog-config.json
         let pendingVisibility = new Map();
@@ -1440,7 +1442,7 @@
         }
 
         function pendingResourceCount() {
-            return pendingResourceFiles.size + pendingResourceFolders.size + pendingResourceMoves.size;
+            return pendingResourceFiles.size + pendingResourceFolders.size + pendingResourceMoves.size + pendingResourceDeletes.size;
         }
 
         function updatePendingResourceBadge() {
@@ -1613,6 +1615,8 @@
                         node = ensureFolder(node, parts[i], parts.slice(0, i + 1).join('/'));
                     }
                 } else {
+                    // 已登记待提交删除的文件不再展示
+                    if (pendingResourceDeletes.has(item.path)) return;
                     // 已经在“待提交移动/重命名”队列里的文件，按目标路径展示
                     const move = pendingResourceMoves.get(item.path);
                     addFile(move ? move.path : item.path, Object.assign(
@@ -1670,6 +1674,8 @@
         function isResourcePathTaken(targetPath, ignorePath) {
             if (!targetPath) return false;
             if (pendingResourceFiles.has(targetPath)) return true;
+            // 已排队待删除的路径视为空闲，可重新上传/移入
+            if (pendingResourceDeletes.has(targetPath)) return false;
             const remoteTaken = resourceRemotePaths.some(item =>
                 item.type === 'file' && item.path === targetPath && item.path !== ignorePath);
             if (remoteTaken) return true;
@@ -2202,19 +2208,21 @@
             renderResourceTreeFromCache();
         }
 
-        // 删除资源文件（远端立即提交，待提交的只移除队列）
-        async function deleteResourceFile(filePath, isPending) {
+        // 删除资源文件：远端文件登记到待提交删除队列，待提交的只移除队列
+        function deleteResourceFile(filePath, isPending) {
             const name = filePath.split('/').pop();
 
-            // 已经登记了移动/重命名但还没提交：删除 = 撤销这次修改
+            // 已在待提交删除队列：不重复登记
+            if (pendingResourceDeletes.has(filePath)) return;
+
+            // 已经登记了移动/重命名但还没提交：先撤销这次修改，再按远端文件登记删除
             const pendingMove = findPendingResourceMove(filePath);
             if (pendingMove && !pendingResourceFiles.has(filePath)) {
-                if (!confirm(`文件 ${pendingMove.move.path} 还在待提交的修改队列里，确定撤销这次移动/重命名吗？`)) return;
+                if (!confirm(`文件 ${pendingMove.move.path} 还在待提交的修改队列里，确定撤销这次修改并删除它吗？`)) return;
                 pendingResourceMoves.delete(pendingMove.fromPath);
-                renderResourceTreeFromCache();
-                return;
             }
 
+            // 还没上传的本地文件：直接从上传队列移除，不进删除队列
             if (isPending || pendingResourceFiles.has(filePath)) {
                 if (!confirm(`确定从待提交队列移除资源文件 ${filePath} 吗？`)) return;
                 pendingResourceFiles.delete(filePath);
@@ -2222,33 +2230,25 @@
                 return;
             }
 
-            const token = getGithubToken();
-            if (!token) {
+            if (!getGithubToken()) {
                 alert('请先登录');
                 return;
             }
-            if (!confirm(`确定删除资源文件 ${filePath} 吗？此操作会直接提交到仓库。`)) return;
+            if (!confirm(`确定删除资源文件 ${filePath} 吗？将在点“提交资源”后统一提交删除。`)) return;
 
-            try {
-                const octokit = createOctokit(token);
-                const result = await deleteRepoFiles(
-                    { octokit, owner: config.owner, repo: config.repo, branch: config.branch },
-                    [filePath],
-                    `删除资源文件: ${name}`
-                );
-                if (!result.success) throw new Error(result.error);
-                resourceRemotePaths = resourceRemotePaths.filter(item => item.path !== filePath);
-                renderResourceTreeFromCache();
-            } catch (error) {
-                console.error('删除资源文件失败:', error);
-                alert(`删除失败: ${error.message}`);
+            const meta = resourceRemotePaths.find(item => item.type === 'file' && item.path === filePath) || {};
+            pendingResourceDeletes.set(filePath, { name, size: meta.size || 0, sha: meta.sha || '' });
+            // 本地视图先移除，条目保留到提交成功后再清缓存
+            resourceRemotePaths = resourceRemotePaths.filter(item => item.path !== filePath);
+            if (repoTreeState.items) {
+                repoTreeState.items = repoTreeState.items.filter(item => item.path !== filePath);
             }
+            renderResourceTreeFromCache();
         }
 
-        // 删除资源文件夹（连同其下文件一起提交删除）
-        async function deleteResourceFolder(folderPath) {
-            const token = getGithubToken();
-            if (!token) {
+        // 删除资源文件夹：其内远端文件登记到待提交删除队列，随“提交资源”一次提交
+        function deleteResourceFolder(folderPath) {
+            if (!getGithubToken()) {
                 alert('请先登录');
                 return;
             }
@@ -2273,29 +2273,27 @@
                 return;
             }
 
-            const ok = confirm(`确定删除文件夹 ${folderPath} 吗？\n其中 ${remoteFiles.length} 个文件会被提交删除，${pendingFiles.length} 个待提交文件会被丢弃。`);
+            const ok = confirm(`确定删除文件夹 ${folderPath} 吗？\n其中 ${remoteFiles.length} 个文件将在提交资源后统一删除，${pendingFiles.length} 个待提交文件会被丢弃。`);
             if (!ok) return;
 
-            try {
-                if (remoteFiles.length > 0) {
-                    const octokit = createOctokit(token);
-                    const result = await deleteRepoFiles(
-                        { octokit, owner: config.owner, repo: config.repo, branch: config.branch },
-                        remoteFiles,
-                        `删除资源文件夹: ${folderPath}`
-                     );
-                    if (!result.success) throw new Error(result.error);
-                }
+            // 远端文件登记到待提交删除队列，随“提交资源”一次提交
+            remoteFiles.forEach(path => {
+                const meta = resourceRemotePaths.find(item => item.path === path) || {};
+                pendingResourceDeletes.set(path, {
+                    name: path.split('/').pop(),
+                    size: meta.size || 0,
+                    sha: meta.sha || ''
+                });
+            });
 
-                pendingFiles.forEach(path => pendingResourceFiles.delete(path));
-                pendingFolders.forEach(path => pendingResourceFolders.delete(path));
-                pendingMoves.forEach(([fromPath]) => pendingResourceMoves.delete(fromPath));
-                resourceRemotePaths = resourceRemotePaths.filter(item => !item.path.startsWith(folderPath + '/'));
-                renderResourceTreeFromCache();
-            } catch (error) {
-                console.error('删除资源文件夹失败:', error);
-                alert(`删除失败: ${error.message}`);
+            pendingFiles.forEach(path => pendingResourceFiles.delete(path));
+            pendingFolders.forEach(path => pendingResourceFolders.delete(path));
+            pendingMoves.forEach(([fromPath]) => pendingResourceMoves.delete(fromPath));
+            resourceRemotePaths = resourceRemotePaths.filter(item => !item.path.startsWith(folderPath + '/'));
+            if (repoTreeState.items) {
+                repoTreeState.items = repoTreeState.items.filter(item => !item.path.startsWith(folderPath + '/'));
             }
+            renderResourceTreeFromCache();
         }
 
         // 把待提交资源追加进一个批次（“提交资源”或保存文章时一起提交）
@@ -2314,6 +2312,11 @@
                     // 老缓存里可能没有 blob sha，退回“读内容再写入”
                     await batch.rename(fromPath, move.path);
                 }
+                count += 1;
+            }
+            // 待提交删除：批次里标记删除
+            for (const [path] of pendingResourceDeletes) {
+                batch.delete(path);
                 count += 1;
             }
             pendingResourceFolders.forEach((meta, path) => {
@@ -2358,6 +2361,7 @@
                 pendingResourceFiles.clear();
                 pendingResourceFolders.clear();
                 pendingResourceMoves.clear();
+                pendingResourceDeletes.clear();
 
                 // 只更新本地缓存，不再为刚提交的文件重新拉一次树
                 committedFiles.forEach(path => {
@@ -3483,6 +3487,7 @@
                     pendingResourceFiles.clear();
                     pendingResourceFolders.clear();
                     pendingResourceMoves.clear();
+                    pendingResourceDeletes.clear();
                     applyCommittedResourceMoves(committedResourceMoves);
                     updatePendingResourceBadge();
 
