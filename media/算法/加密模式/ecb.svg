@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="460" height="500" viewBox="0 0 460 500" font-family="Arial, sans-serif" font-size="14">
+  <text x="230" y="24" text-anchor="middle" font-size="16" font-weight="bold">ECB 加密与解密</text>
+
+  <!-- 加密标签：放在明文行上方 -->
+  <text x="40" y="48" font-size="13" fill="#555">加密</text>
+
+  <rect x="40" y="60" width="110" height="40" rx="6" fill="#e8f0fe" stroke="#333"/>
+  <text x="95" y="85" text-anchor="middle">明文 P1</text>
+  <rect x="160" y="60" width="110" height="40" rx="6" fill="#e8f0fe" stroke="#333"/>
+  <text x="215" y="85" text-anchor="middle">明文 P2</text>
+  <rect x="280" y="60" width="110" height="40" rx="6" fill="#e8f0fe" stroke="#333"/>
+  <text x="335" y="85" text-anchor="middle">明文 P3</text>
+
+  <line x1="95" y1="100" x2="95" y2="162" stroke="#333"/>
+  <polygon points="89,162 101,162 95,170" fill="#333"/>
+  <line x1="215" y1="100" x2="215" y2="162" stroke="#333"/>
+  <polygon points="209,162 221,162 215,170" fill="#333"/>
+  <line x1="335" y1="100" x2="335" y2="162" stroke="#333"/>
+  <polygon points="329,162 341,162 335,170" fill="#333"/>
+
+  <text x="103" y="132" font-size="12" fill="#c62828">enc</text>
+  <text x="223" y="132" font-size="12" fill="#c62828">enc</text>
+  <text x="343" y="132" font-size="12" fill="#c62828">enc</text>
+
+  <rect x="40" y="170" width="110" height="40" rx="6" fill="#e8f5e9" stroke="#333"/>
+  <text x="95" y="195" text-anchor="middle">密文 C1</text>
+  <rect x="160" y="170" width="110" height="40" rx="6" fill="#e8f5e9" stroke="#333"/>
+  <text x="215" y="195" text-anchor="middle">密文 C2</text>
+  <rect x="280" y="170" width="110" height="40" rx="6" fill="#e8f5e9" stroke="#333"/>
+  <text x="335" y="195" text-anchor="middle">密文 C3</text>
+
+  <line x1="20" y1="240" x2="440" y2="240" stroke="#ccc" stroke-dasharray="6,4"/>
+
+  <!-- 解密标签：放在密文行上方 -->
+  <text x="40" y="254" font-size="13" fill="#555">解密</text>
+
+  <rect x="40" y="260" width="110" height="40" rx="6" fill="#e8f5e9" stroke="#333"/>
+  <text x="95" y="285" text-anchor="middle">密文 C1</text>
+  <rect x="160" y="260" width="110" height="40" rx="6" fill="#e8f5e9" stroke="#333"/>
+  <text x="215" y="285" text-anchor="middle">密文 C2</text>
+  <rect x="280" y="260" width="110" height="40" rx="6" fill="#e8f5e9" stroke="#333"/>
+  <text x="335" y="285" text-anchor="middle">密文 C3</text>
+
+  <line x1="95" y1="300" x2="95" y2="362" stroke="#333"/>
+  <polygon points="89,362 101,362 95,370" fill="#333"/>
+  <line x1="215" y1="300" x2="215" y2="362" stroke="#333"/>
+  <polygon points="209,362 221,362 215,370" fill="#333"/>
+  <line x1="335" y1="300" x2="335" y2="362" stroke="#333"/>
+  <polygon points="329,362 341,362 335,370" fill="#333"/>
+
+  <text x="103" y="332" font-size="12" fill="#c62828">dec</text>
+  <text x="223" y="332" font-size="12" fill="#c62828">dec</text>
+  <text x="343" y="332" font-size="12" fill="#c62828">dec</text>
+
+  <rect x="40" y="370" width="110" height="40" rx="6" fill="#e8f0fe" stroke="#333"/>
+  <text x="95" y="395" text-anchor="middle">明文 P1</text>
+  <rect x="160" y="370" width="110" height="40" rx="6" fill="#e8f0fe" stroke="#333"/>
+  <text x="215" y="395" text-anchor="middle">明文 P2</text>
+  <rect x="280" y="370" width="110" height="40" rx="6" fill="#e8f0fe" stroke="#333"/>
+  <text x="335" y="395" text-anchor="middle">明文 P3</text>
+</svg>
