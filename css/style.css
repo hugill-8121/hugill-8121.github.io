@@ -1083,7 +1083,8 @@ h1 {
 }
 
 /* 待提交资源标记 */
-.tree-item.file.pending {
+.tree-item.file.pending,
+.tree-item.file.moved {
     background-color: #fffbeb;
 }
 

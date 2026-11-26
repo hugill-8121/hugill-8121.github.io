@@ -134,6 +134,9 @@
         <div class="context-menu-item" id="res-delete-folder" style="display: none;">
             <i class="fa fa-trash-o"></i> 删除文件夹
         </div>
+        <div class="context-menu-item" id="res-rename-file" style="display: none;">
+            <i class="fa fa-pencil"></i> 重命名
+        </div>
         <div class="context-menu-item" id="res-delete-file" style="display: none;">
             <i class="fa fa-trash-o"></i> 删除文件
         </div>
@@ -472,6 +475,7 @@
             resUploadFile: document.getElementById('res-upload-file'),
             resNewFolder: document.getElementById('res-new-folder'),
             resDeleteFolder: document.getElementById('res-delete-folder'),
+            resRenameFile: document.getElementById('res-rename-file'),
             resDeleteFile: document.getElementById('res-delete-file'),
             // 资源提交
             resourceCommitBtn: document.getElementById('commit-resources'),
@@ -554,6 +558,9 @@
         let pendingResourceFiles = new Map();
         // 待创建的资源文件夹（key: 仓库路径, value: { name }）
         let pendingResourceFolders = new Map();
+        // 待提交的资源移动/重命名（key: 仓库里的原路径, value: { path: 目标路径, sha, size }）
+        // 拖拽或重命名只登记到这里，点“提交资源”时随批次一次提交
+        let pendingResourceMoves = new Map();
         // 文件栏批量显示状态变更（key: 文章仓库路径, value: 目标 hidden 布尔值）
         // 勾选只登记到这里，点“提交显示状态”时一次性写回 blog-config.json
         let pendingVisibility = new Map();
@@ -1433,7 +1440,7 @@
         }
 
         function pendingResourceCount() {
-            return pendingResourceFiles.size + pendingResourceFolders.size;
+            return pendingResourceFiles.size + pendingResourceFolders.size + pendingResourceMoves.size;
         }
 
         function updatePendingResourceBadge() {
@@ -1606,7 +1613,12 @@
                         node = ensureFolder(node, parts[i], parts.slice(0, i + 1).join('/'));
                     }
                 } else {
-                    addFile(item.path, { pending: false, sha: item.sha || '' });
+                    // 已经在“待提交移动/重命名”队列里的文件，按目标路径展示
+                    const move = pendingResourceMoves.get(item.path);
+                    addFile(move ? move.path : item.path, Object.assign(
+                        { pending: false, sha: item.sha || '' },
+                        move ? { moved: true, fromPath: item.path } : {}
+                    ));
                 }
             });
 
@@ -1628,14 +1640,43 @@
             return root;
         }
 
-        // ==================== 资源文件拖拽移动 ====================
-        // 拖动资源树里的文件到另一个文件夹，即可修改它的归属路径。
-        // 待提交的文件只改队列里的路径；已在仓库里的文件会立刻提交一次“移动”（引用原 blob，不重传内容）。
-        let resourceDragState = null; // { path, pending }
+        // ==================== 资源文件拖拽移动 / 重命名 ====================
+        // 拖动资源树里的文件到另一个文件夹、或右键重命名，都只是“登记待提交”，
+        // 不产生提交；统一在点“提交资源”（或保存文章）时和其它资源一起提交一次。
+        let resourceDragState = null; // { path, pending, moved }
 
         function resourceParentOf(path) {
             const index = String(path || '').lastIndexOf('/');
             return index > -1 ? path.substring(0, index) : '';
+        }
+
+        // 文件在界面上展示的路径（可能已经被拖走/改名，但还没提交）
+        function resourceVirtualPath(path) {
+            const move = pendingResourceMoves.get(path);
+            return move ? move.path : path;
+        }
+
+        // 找某条待提交的移动：path 可能是原路径，也可能是移动后的目标路径
+        function findPendingResourceMove(path) {
+            if (!path) return null;
+            if (pendingResourceMoves.has(path)) return { fromPath: path, move: pendingResourceMoves.get(path) };
+            for (const [fromPath, move] of pendingResourceMoves) {
+                if (move.path === path) return { fromPath, move };
+            }
+            return null;
+        }
+
+        // 目标路径是否已被别的文件占用（远端 / 待上传 / 已排队的移动）
+        function isResourcePathTaken(targetPath, ignorePath) {
+            if (!targetPath) return false;
+            if (pendingResourceFiles.has(targetPath)) return true;
+            const remoteTaken = resourceRemotePaths.some(item =>
+                item.type === 'file' && item.path === targetPath && item.path !== ignorePath);
+            if (remoteTaken) return true;
+            for (const [fromPath, move] of pendingResourceMoves) {
+                if (move.path === targetPath && fromPath !== ignorePath) return true;
+            }
+            return false;
         }
 
         // 目标目录必须是 asserts 本身或它的子目录；移动到原目录视为无效
@@ -1643,7 +1684,8 @@
             if (!fromPath) return false;
             const folder = targetFolder || RESOURCE_ROOT;
             if (folder !== RESOURCE_ROOT && !folder.startsWith(RESOURCE_ROOT + '/')) return false;
-            return `${folder}/${fromPath.split('/').pop()}` !== fromPath;
+            const currentPath = resourceVirtualPath(fromPath);
+            return `${folder}/${currentPath.split('/').pop()}` !== currentPath;
         }
 
         function clearResourceDragHover() {
@@ -1654,7 +1696,7 @@
         }
 
         function startResourceDrag(e, file, el) {
-            resourceDragState = { path: file.path, pending: !!file.pending, name: file.name };
+            resourceDragState = { path: file.fromPath || file.path, pending: !!file.pending, moved: !!file.moved };
             el.classList.add('dragging');
             if (e.dataTransfer) {
                 e.dataTransfer.effectAllowed = 'move';
@@ -1695,99 +1737,128 @@
             moveResourceFile(state.path, folderPath);
         }
 
-        // 移动资源文件（拖拽和将来的右键菜单共用）
-        async function moveResourceFile(fromPath, targetFolderPath) {
+        // 移动到目标目录（拖拽用）：只登记待提交
+        function moveResourceFile(fromPath, targetFolderPath) {
             const targetFolder = String(targetFolderPath || RESOURCE_ROOT).replace(/\/+$/, '') || RESOURCE_ROOT;
-            const name = String(fromPath || '').split('/').pop();
-            const targetPath = `${targetFolder}/${name}`;
-
-            if (!fromPath || !name) return;
-            if (targetPath === fromPath) {
-                showToast('文件已在该目录下');
-                return;
-            }
+            if (!fromPath) return;
             if (targetFolder !== RESOURCE_ROOT && !targetFolder.startsWith(RESOURCE_ROOT + '/')) {
                 showToast('只能移动到 asserts 目录内', true);
                 return;
             }
+            const currentPath = resourceVirtualPath(fromPath);
+            const name = String(currentPath || '').split('/').pop();
+            const targetPath = `${targetFolder}/${name}`;
+            if (targetPath === currentPath) {
+                showToast('文件已在该目录下');
+                return;
+            }
+            relocateResourceFile(fromPath, targetPath);
+        }
 
-            const conflictRemote = resourceRemotePaths.some(item => item.type === 'file' && item.path === targetPath);
-            const conflictPending = pendingResourceFiles.has(targetPath);
-            if (conflictRemote || conflictPending) {
-                showToast(`目标目录已存在同名文件：${targetPath}，请先重命名或删除`, true);
+        // 登记一次移动/重命名（拖拽与右键重命名共用），真正提交在“提交资源”时
+        function relocateResourceFile(fromPath, targetPath) {
+            const existing = findPendingResourceMove(fromPath);
+            const originalPath = existing ? existing.fromPath : fromPath;
+            const currentPath = existing ? existing.move.path : fromPath;
+            const name = String(targetPath || '').split('/').pop();
+            const targetFolder = resourceParentOf(targetPath);
+
+            if (!fromPath || !name) return;
+            if (targetPath === currentPath) {
+                showToast('路径没有变化');
+                return;
+            }
+            if (targetFolder !== RESOURCE_ROOT && !targetFolder.startsWith(RESOURCE_ROOT + '/')) {
+                showToast('只能修改为 asserts 目录内的路径', true);
+                return;
+            }
+            if (isResourcePathTaken(targetPath, originalPath)) {
+                showToast(`目标位置已存在同名文件：${targetPath}，请先重命名或删除`, true);
                 return;
             }
 
-            // 待提交的文件：只调整队列，不产生提交
-            if (pendingResourceFiles.has(fromPath)) {
-                const meta = pendingResourceFiles.get(fromPath) || {};
-                pendingResourceFiles.delete(fromPath);
+            // 还没上传的本地文件：只调整上传队列，不涉及提交
+            const pendingKey = pendingResourceFiles.has(fromPath) ? fromPath
+                : (pendingResourceFiles.has(originalPath) ? originalPath : '');
+            if (pendingKey) {
+                const meta = pendingResourceFiles.get(pendingKey) || {};
+                pendingResourceFiles.delete(pendingKey);
                 pendingResourceFiles.set(targetPath, Object.assign({}, meta, { name, folderPath: targetFolder }));
                 renderResourceTreeFromCache();
-                showToast(`已移动到 ${targetFolder}（待提交）`);
+                showToast(`已改为 ${targetPath}（待提交）`);
                 return;
             }
 
-            const token = getGithubToken();
-            if (!token) {
-                alert('请先登录后再移动资源文件');
-                return;
-            }
-
-            const fileMeta = resourceRemotePaths.find(item => item.type === 'file' && item.path === fromPath);
+            const fileMeta = resourceRemotePaths.find(item => item.type === 'file' && item.path === originalPath);
             if (!fileMeta) {
-                showToast(`找不到资源文件：${fromPath}`, true);
+                showToast(`找不到资源文件：${originalPath}`, true);
+                return;
+            }
+            if (!getGithubToken()) {
+                alert('请先登录后再修改资源文件路径');
                 return;
             }
 
-            const octokit = createOctokit(token);
-            const batch = new CommitBatch({
-                octokit,
-                owner: config.owner,
-                repo: config.repo,
-                branch: config.branch
-            });
-
-            try {
-                if (fileMeta.sha) {
-                    batch.moveRef(fromPath, targetPath, fileMeta.sha);
-                } else {
-                    // 老缓存里可能没有 sha，退回“读内容再写入”的方式
-                    await batch.rename(fromPath, targetPath);
-                }
-                const result = await batch.commit(`移动资源文件: ${name} -> ${targetFolder}`);
-                if (!result.success) throw new Error(result.error);
-
-                resourceRemotePaths = resourceRemotePaths.filter(item => item.path !== fromPath);
-                resourceRemotePaths.push({
-                    path: targetPath,
-                    type: 'file',
-                    size: fileMeta.size || 0,
-                    sha: fileMeta.sha || ''
-                });
-                if (repoTreeState.items) {
-                    const index = repoTreeState.items.findIndex(item => item.path === fromPath);
-                    const moved = { path: targetPath, type: 'file', size: fileMeta.size || 0, sha: fileMeta.sha || '' };
-                    if (index > -1) repoTreeState.items.splice(index, 1, moved);
-                    else repoTreeState.items.push(moved);
-                }
-
-                // 目标目录如果本来在“待创建”队列里，现在已经有内容了，就不再需要占位提交
-                prunePendingResourceFolders();
+            // 挪回原路径 = 撤销这次待提交的修改
+            if (targetPath === originalPath) {
+                pendingResourceMoves.delete(originalPath);
                 renderResourceTreeFromCache();
-                showToast(`已移动到 ${targetFolder}`);
-            } catch (error) {
-                console.error('移动资源文件失败:', error);
-                showToast(`移动失败: ${error.message}`, true);
+                showToast('已恢复到原位置（撤销这次修改）');
+                return;
             }
+
+            pendingResourceMoves.set(originalPath, {
+                path: targetPath,
+                sha: fileMeta.sha || '',
+                size: fileMeta.size || 0
+            });
+            renderResourceTreeFromCache();
+            showToast(`已登记到 ${targetPath}，点“提交资源”后一起生效`);
+        }
+
+        // 右键重命名（只改文件名，不改目录）
+        function renameResourceFile(filePath) {
+            const currentPath = resourceVirtualPath(filePath);
+            const folder = resourceParentOf(currentPath);
+            const oldName = currentPath.split('/').pop();
+            const raw = prompt(`重命名资源文件（只写新文件名，不含目录）：`, oldName);
+            if (raw == null) return;
+            const nextName = String(raw).trim();
+            if (!nextName || nextName === oldName) return;
+            if (nextName.includes('/') || nextName.includes('\\')) {
+                showToast('文件名不能包含斜杠', true);
+                return;
+            }
+            if (/[<>:"|?*]/.test(nextName)) {
+                showToast('文件名不能包含 < > : " | ? *', true);
+                return;
+            }
+            relocateResourceFile(filePath, `${folder}/${nextName}`);
         }
 
         // 移除“已有远端内容”的待创建文件夹（它们不再需要 .gitkeep 占位）
         function prunePendingResourceFolders() {
             pendingResourceFolders.forEach((meta, path) => {
                 const hasPendingFile = Array.from(pendingResourceFiles.keys()).some(p => p.startsWith(path + '/'));
-                const hasRemoteFile = resourceRemotePaths.some(item => item.type === 'file' && item.path.startsWith(path + '/'));
+                const hasRemoteFile = resourceRemotePaths.some(item => item.type === 'file' && item.path.startsWith(path + '/'))
+                    || Array.from(pendingResourceMoves.values()).some(move => move.path.startsWith(path + '/'));
                 if (!hasPendingFile && hasRemoteFile) pendingResourceFolders.delete(path);
+            });
+        }
+
+        // 提交成功后把移动/重命名结果写回本地缓存
+        function applyCommittedResourceMoves(movedEntries) {
+            movedEntries.forEach(([fromPath, meta]) => {
+                resourceRemotePaths = resourceRemotePaths.filter(item => item.path !== fromPath);
+                if (!resourceRemotePaths.some(item => item.path === meta.path)) {
+                    resourceRemotePaths.push({ path: meta.path, type: 'file', size: meta.size || 0, sha: meta.sha || '' });
+                }
+                if (repoTreeState.items) {
+                    const moved = { path: meta.path, type: 'file', size: meta.size || 0, sha: meta.sha || '' };
+                    const index = repoTreeState.items.findIndex(item => item.path === fromPath);
+                    if (index > -1) repoTreeState.items.splice(index, 1, moved);
+                    else if (!repoTreeState.items.some(item => item.path === meta.path)) repoTreeState.items.push(moved);
+                }
             });
         }
 
@@ -1827,27 +1898,30 @@
 
             files.forEach(file => {
                 const el = document.createElement('div');
-                el.className = 'tree-item file' + (file.pending ? ' pending' : '');
+                el.className = 'tree-item file' + (file.pending ? ' pending' : '') + (file.moved ? ' moved' : '');
                 el.dataset.path = file.path;
                 el.dataset.parentPath = file.parentPath;
                 el.dataset.fileName = file.name;
                 el.style.paddingLeft = `${level * 16 + 8}px`;
                 el.title = file.pending
                     ? `${file.path}（待提交，可拖到其他文件夹）`
-                    : `${file.path}（可拖到其他文件夹）`;
+                    : (file.moved
+                        ? `${file.fromPath} → ${file.path}（待提交的移动/重命名，点“提交资源”后生效）`
+                        : `${file.path}（可拖到其他文件夹）`);
                 el.innerHTML = `<i class="fa ${getFileIcon(file.name)}"></i> ${escapeHtml(file.name)}`
-                    + (file.pending ? '<span class="pending-badge">待提交</span>' : '');
+                    + (file.pending ? '<span class="pending-badge">待提交</span>' : '')
+                    + (file.moved ? '<span class="pending-badge">待提交</span>' : '');
 
                 // 匿名只读时远端文件不可写，隐藏拖拽能力；待提交文件只是改本队列，随时可拖
-                el.draggable = !!file.pending || !!getGithubToken();
+                el.draggable = !!file.pending || !!file.moved || !!getGithubToken();
                 if (el.draggable) {
                     el.addEventListener('dragstart', (e) => startResourceDrag(e, file, el));
                     el.addEventListener('dragend', () => endResourceDrag());
                 }
 
                 el.addEventListener('dblclick', () => {
-                    if (file.pending) {
-                        alert('该文件还未提交，提交后才能在线查看');
+                    if (file.pending || file.moved) {
+                        alert('该文件的修改还没有提交，提交后才能在线查看');
                         return;
                     }
                     window.open(rawResourceUrl(file.path), '_blank');
@@ -1855,7 +1929,7 @@
                 el.addEventListener('contextmenu', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    showResourceFileContextMenu(e, file.path, !!file.pending);
+                    showResourceFileContextMenu(e, file.path, !!file.pending || !!file.moved);
                 });
 
                 dom.resourceTree.appendChild(el);
@@ -1979,6 +2053,7 @@
             dom.resUploadFile.style.display = 'flex';
             dom.resNewFolder.style.display = 'flex';
             dom.resDeleteFolder.style.display = 'flex';
+            dom.resRenameFile.style.display = 'none';
             dom.resDeleteFile.style.display = 'none';
 
             dom.resCopyPath.onclick = () => {
@@ -2014,10 +2089,17 @@
             dom.resNewFolder.style.display = 'none';
             dom.resDeleteFolder.style.display = 'none';
             dom.resDeleteFile.style.display = 'flex';
+            // 重命名：待上传的文件随时可改；远端文件需要登录（会记为待提交的移动）
+            dom.resRenameFile.style.display = (isPending || getGithubToken()) ? 'flex' : 'none';
 
             dom.resCopyPath.onclick = () => {
                 copyText('/' + filePath);
                 dom.resourceContextMenu.style.display = 'none';
+            };
+
+            dom.resRenameFile.onclick = () => {
+                dom.resourceContextMenu.style.display = 'none';
+                renameResourceFile(filePath);
             };
 
             dom.resDeleteFile.onclick = () => {
@@ -2073,7 +2155,8 @@
                     if (!ok) return;
                 }
                 const exists = resourceRemotePaths.some(item => item.path === filePath)
-                    || pendingResourceFiles.has(filePath);
+                    || pendingResourceFiles.has(filePath)
+                    || isResourcePathTaken(filePath, '');
                 if (exists && !confirm(`资源已存在：${filePath}，要覆盖吗？`)) return;
 
                 const content = await readFileAsBase64(file);
@@ -2123,6 +2206,15 @@
         async function deleteResourceFile(filePath, isPending) {
             const name = filePath.split('/').pop();
 
+            // 已经登记了移动/重命名但还没提交：删除 = 撤销这次修改
+            const pendingMove = findPendingResourceMove(filePath);
+            if (pendingMove && !pendingResourceFiles.has(filePath)) {
+                if (!confirm(`文件 ${pendingMove.move.path} 还在待提交的修改队列里，确定撤销这次移动/重命名吗？`)) return;
+                pendingResourceMoves.delete(pendingMove.fromPath);
+                renderResourceTreeFromCache();
+                return;
+            }
+
             if (isPending || pendingResourceFiles.has(filePath)) {
                 if (!confirm(`确定从待提交队列移除资源文件 ${filePath} 吗？`)) return;
                 pendingResourceFiles.delete(filePath);
@@ -2168,8 +2260,12 @@
                 .filter(path => path.startsWith(folderPath + '/'));
             const pendingFolders = Array.from(pendingResourceFolders.keys())
                 .filter(path => path === folderPath || path.startsWith(folderPath + '/'));
+            // 文件夹内还有待提交的移动/改名：一并撤销（原文件要么被删除，要么留在原地）
+            const pendingMoves = Array.from(pendingResourceMoves.entries())
+                .filter(([fromPath, move]) => fromPath.startsWith(folderPath + '/') || move.path.startsWith(folderPath + '/'));
 
-            if (remoteFiles.length === 0 && pendingFiles.length === 0 && pendingFolders.length === 0) {
+            if (remoteFiles.length === 0 && pendingFiles.length === 0 && pendingFolders.length === 0
+                && pendingMoves.length === 0) {
                 // 只是空文件夹，移除前同样确认
                 if (!confirm(`确定移除空文件夹 ${folderPath} 吗？`)) return;
                 pendingResourceFolders.delete(folderPath);
@@ -2193,6 +2289,7 @@
 
                 pendingFiles.forEach(path => pendingResourceFiles.delete(path));
                 pendingFolders.forEach(path => pendingResourceFolders.delete(path));
+                pendingMoves.forEach(([fromPath]) => pendingResourceMoves.delete(fromPath));
                 resourceRemotePaths = resourceRemotePaths.filter(item => !item.path.startsWith(folderPath + '/'));
                 renderResourceTreeFromCache();
             } catch (error) {
@@ -2201,15 +2298,27 @@
             }
         }
 
-        // 把待提交资源追加进一个批次（保存文章时一起提交）
-        function appendPendingResources(batch) {
+        // 把待提交资源追加进一个批次（“提交资源”或保存文章时一起提交）
+        async function appendPendingResources(batch) {
             let count = 0;
             pendingResourceFiles.forEach((meta, path) => {
                 batch.addBinary(path, meta.content);
                 count += 1;
             });
+            // 移动/重命名：新路径直接引用原 blob sha，不重传内容
+            for (const [fromPath, move] of pendingResourceMoves) {
+                if (!move.path || move.path === fromPath) continue;
+                if (move.sha) {
+                    batch.moveRef(fromPath, move.path, move.sha);
+                } else {
+                    // 老缓存里可能没有 blob sha，退回“读内容再写入”
+                    await batch.rename(fromPath, move.path);
+                }
+                count += 1;
+            }
             pendingResourceFolders.forEach((meta, path) => {
                 const hasContent = Array.from(pendingResourceFiles.keys()).some(p => p.startsWith(path + '/'))
+                    || Array.from(pendingResourceMoves.values()).some(move => move.path.startsWith(path + '/'))
                     || resourceRemotePaths.some(item => item.path.startsWith(path + '/'));
                 if (!hasContent) {
                     // Git 不能存空目录，用 .gitkeep 占位
@@ -2236,9 +2345,10 @@
                 branch: config.branch
             });
 
-            const fileCount = appendPendingResources(batch);
+            const fileCount = await appendPendingResources(batch);
             const committedFiles = Array.from(pendingResourceFiles.keys());
             const committedFolders = Array.from(pendingResourceFolders.keys());
+            const committedMoves = Array.from(pendingResourceMoves.entries());
             dom.resourceCommitBtn.disabled = true;
             dom.resourceCommitBtn.textContent = '提交中...';
 
@@ -2247,6 +2357,7 @@
                 if (!result.success) throw new Error(result.error);
                 pendingResourceFiles.clear();
                 pendingResourceFolders.clear();
+                pendingResourceMoves.clear();
 
                 // 只更新本地缓存，不再为刚提交的文件重新拉一次树
                 committedFiles.forEach(path => {
@@ -2262,8 +2373,9 @@
                         resourceRemotePaths.push({ path, type: 'folder', size: 0 });
                     }
                 });
+                applyCommittedResourceMoves(committedMoves);
                 renderResourceTreeFromCache();
-                alert('资源已提交');
+                alert(`资源已提交（${fileCount} 个文件）`);
                 return result;
             } catch (error) {
                 console.error('提交资源失败:', error);
@@ -3323,7 +3435,7 @@
                     });
                     batch.add(filePath, content);
                     batch.add('blog-config.json', configText);
-                    const resourceCount = appendPendingResources(batch);
+                    const resourceCount = await appendPendingResources(batch);
 
                     // 提交信息：表单里填了就用填写的，留空用默认
                     const commitMessage = resolveCommitMessage(isNew, title);
@@ -3337,8 +3449,8 @@
                     tab.isNew = false;
                     tab.blog.title = title;
                     tab.blog.tags = tags.slice();
-                    tab.blog.hidden = dom.editHidden.checked;
                     tab.blog.path = filePath;
+                    tab.blog.hidden = dom.editHidden.checked;
                     tab.blog.folder = folder || getBlogFolder({ path: filePath });
                     tab.blog.blog_uuid = uuid;
                     tab.blog.uuid = uuid;
@@ -3367,8 +3479,11 @@
 
                     const committedResourceFiles = Array.from(pendingResourceFiles.keys());
                     const committedResourceFolders = Array.from(pendingResourceFolders.keys());
+                    const committedResourceMoves = Array.from(pendingResourceMoves.entries());
                     pendingResourceFiles.clear();
                     pendingResourceFolders.clear();
+                    pendingResourceMoves.clear();
+                    applyCommittedResourceMoves(committedResourceMoves);
                     updatePendingResourceBadge();
 
                     renderTabs();
