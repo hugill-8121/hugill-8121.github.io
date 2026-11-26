@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="780" viewBox="0 0 900 780" font-family="Arial, sans-serif" font-size="14">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#333"/>
+    </marker>
+  </defs>
+
+  <text x="450" y="24" text-anchor="middle" font-size="16" font-weight="bold">CCM 加密与解密</text>
+
+  <!-- ================= 加密部分 ================= -->
+  <text x="30" y="50" font-size="13" fill="#555">加密</text>
+
+  <!-- 第1行：B0 和 AAD/明文 进入 CBC-MAC -->
+  <rect x="40" y="70" width="100" height="36" rx="6" fill="#ede7f6" stroke="#333"/>
+  <text x="90" y="93" text-anchor="middle" font-size="12">B0</text>
+
+  <rect x="180" y="70" width="100" height="36" rx="6" fill="#fff3e0" stroke="#333"/>
+  <text x="230" y="93" text-anchor="middle" font-size="12">AAD</text>
+
+  <rect x="320" y="70" width="100" height="36" rx="6" fill="#e8f0fe" stroke="#333"/>
+  <text x="370" y="93" text-anchor="middle">明文 P</text>
+
+  <!-- 进入 CBC-MAC -->
+  <line x1="90" y1="106" x2="90" y2="156" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="230" y1="106" x2="230" y2="156" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="370" y1="106" x2="370" y2="156" stroke="#333" marker-end="url(#arrow)"/>
+
+  <!-- CBC-MAC 框 -->
+  <rect x="40" y="160" width="380" height="40" rx="6" fill="#fff3e0" stroke="#333"/>
+  <text x="230" y="185" text-anchor="middle" font-size="12">CBC-MAC（认证）</text>
+  <text x="90" y="150" font-size="10" fill="#c62828">auth</text>
+
+  <!-- CBC-MAC 输出 T -->
+  <line x1="230" y1="200" x2="230" y2="256" stroke="#333" marker-end="url(#arrow)"/>
+  <rect x="180" y="260" width="100" height="36" rx="6" fill="#e8f5e9" stroke="#333"/>
+  <text x="230" y="283" text-anchor="middle" font-size="12">认证标签 T</text>
+
+  <!-- 第2行：CTR 加密 -->
+  <rect x="500" y="70" width="100" height="36" rx="6" fill="#f3e5f5" stroke="#333"/>
+  <text x="550" y="93" text-anchor="middle" font-size="12">CTR（A0）</text>
+
+  <line x1="550" y1="106" x2="550" y2="156" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="558" y="136" font-size="11" fill="#c62828">enc</text>
+
+  <rect x="500" y="160" width="100" height="36" rx="6" fill="#f3e5f5" stroke="#333"/>
+  <text x="550" y="183" text-anchor="middle" font-size="12">S0</text>
+
+  <!-- 明文和 T 进入 CTR 加密（异或） -->
+  <line x1="370" y1="186" x2="496" y2="186" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="230" y1="296" x2="230" y2="316" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="230" y1="316" x2="550" y2="316" stroke="#333"/>
+  <line x1="550" y1="316" x2="550" y2="196" stroke="#333" marker-end="url(#arrow)"/>
+
+  <!-- 密文输出 -->
+  <line x1="550" y1="196" x2="550" y2="256" stroke="#333" marker-end="url(#arrow)"/>
+  <rect x="500" y="260" width="100" height="36" rx="6" fill="#e8f5e9" stroke="#333"/>
+  <text x="550" y="283" text-anchor="middle" font-size="12">密文 C</text>
+
+  <!-- 加密后的 T -->
+  <line x1="550" y1="196" x2="700" y2="196" stroke="#333" marker-end="url(#arrow)"/>
+  <rect x="700" y="260" width="100" height="36" rx="6" fill="#e8f5e9" stroke="#333"/>
+  <text x="750" y="283" text-anchor="middle" font-size="12">加密的 T</text>
+
+  <line x1="20" y1="360" x2="880" y2="360" stroke="#ccc" stroke-dasharray="6,4"/>
+
+  <!-- ================= 解密部分 ================= -->
+  <text x="30" y="390" font-size="13" fill="#555">解密</text>
+
+  <!-- 密文和加密的 T 输入 -->
+  <rect x="40" y="410" width="100" height="36" rx="6" fill="#e8f5e9" stroke="#333"/>
+  <text x="90" y="433" text-anchor="middle" font-size="12">密文 C</text>
+
+  <rect x="180" y="410" width="100" height="36" rx="6" fill="#e8f5e9" stroke="#333"/>
+  <text x="230" y="433" text-anchor="middle" font-size="12">加密的 T</text>
+
+  <!-- CTR 解密 -->
+  <rect x="500" y="410" width="100" height="36" rx="6" fill="#f3e5f5" stroke="#333"/>
+  <text x="550" y="433" text-anchor="middle" font-size="12">CTR（A0）</text>
+
+  <line x1="550" y1="446" x2="550" y2="496" stroke="#333" marker-end="url(#arrow)"/>
+  <text x="558" y="476" font-size="11" fill="#c62828">enc</text>
+
+  <rect x="500" y="500" width="100" height="36" rx="6" fill="#f3e5f5" stroke="#333"/>
+  <text x="550" y="523" text-anchor="middle" font-size="12">S0</text>
+
+  <!-- 异或恢复明文和 T -->
+  <line x1="90" y1="446" x2="90" y2="536" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="90" y1="536" x2="550" y2="536" stroke="#333"/>
+  <line x1="550" y1="536" x2="550" y2="536" stroke="#333"/>
+
+  <line x1="230" y1="446" x2="230" y2="556" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="230" y1="556" x2="550" y2="556" stroke="#333"/>
+
+  <!-- 恢复的明文 P 和 T -->
+  <rect x="40" y="570" width="100" height="36" rx="6" fill="#e8f0fe" stroke="#333"/>
+  <text x="90" y="593" text-anchor="middle">明文 P</text>
+
+  <rect x="180" y="570" width="100" height="36" rx="6" fill="#e8f5e9" stroke="#333"/>
+  <text x="230" y="593" text-anchor="middle" font-size="12">T（恢复）</text>
+
+  <!-- 用恢复的明文和 AAD 重新计算 CBC-MAC，与 T 比对 -->
+  <line x1="90" y1="606" x2="90" y2="656" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="230" y1="606" x2="230" y2="656" stroke="#333" marker-end="url(#arrow)"/>
+
+  <rect x="40" y="660" width="380" height="40" rx="6" fill="#fff3e0" stroke="#333"/>
+  <text x="230" y="685" text-anchor="middle" font-size="12">CBC-MAC（重新计算）</text>
+
+  <line x1="230" y1="700" x2="230" y2="736" stroke="#333" marker-end="url(#arrow)"/>
+  <rect x="180" y="740" width="100" height="36" rx="6" fill="#e8f5e9" stroke="#333"/>
+  <text x="230" y="763" text-anchor="middle" font-size="12">计算 T'</text>
+
+  <line x1="280" y1="758" x2="360" y2="758" stroke="#333" marker-end="url(#arrow)"/>
+  <rect x="360" y="740" width="120" height="36" rx="6" fill="#fff3e0" stroke="#333"/>
+  <text x="420" y="763" text-anchor="middle" font-size="12">比对 T' 与 T</text>
+</svg>
