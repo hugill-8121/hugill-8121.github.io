@@ -3,7 +3,7 @@
  *
  * 配置文件结构：
  * {
- *   browser_tag, web_title, web_introduction,
+ *   browser_tag, web_title, web_introduction, web_icon,
  *   blogs: { <group>: [ { blog_uuid, title, description, path, tags } ] }
  * }
  */

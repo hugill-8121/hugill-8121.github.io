@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- 白色圆角背景，黑色描边 -->
+  <rect x="16" y="16" width="480" height="480" rx="104" fill="#FFFFFF" stroke="#000000" stroke-width="16"/>
+  <!-- 左书页（浅灰填充，黑描边） -->
+  <path d="M140 100 L140 412 L256 360 L256 152 L140 100 Z" fill="#F0F0F0" stroke="#000000" stroke-width="10" stroke-linejoin="round"/>
+  <!-- 右书页（白填充，黑描边） -->
+  <path d="M256 152 L256 360 L372 412 L372 100 L256 152 Z" fill="#FFFFFF" stroke="#000000" stroke-width="10" stroke-linejoin="round"/>
+  <!-- 书脊高光（浅灰细线） -->
+  <rect x="248" y="140" width="16" height="232" rx="8" fill="#000000" opacity="0.15"/>
+  <!-- 字母 B（黑色描边，放大加粗） -->
+  <path d="M196 168 L196 344 M196 168 L272 168 C312 168 324 204 324 228 C324 252 300 276 272 276 L196 276 M196 276 L288 276 C328 276 340 312 340 336 C340 360 316 384 288 384 L196 384"
+        stroke="#000000" stroke-width="30" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
