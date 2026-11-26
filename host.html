@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图床 · media/</title>
+    <meta name="description" content="把仓库 media/ 目录当作图床：上传即得 Pages 直链，站外页面和 Markdown 编辑器可直接引用。">
+    <link rel="icon" type="image/svg+xml" href="assets/images/favicon.svg">
+    <link rel="stylesheet" href="assets/css/host.css">
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- 顶栏：返回博客、登录态、刷新、批量复制 -->
+    <div class="host-topbar">
+        <div class="host-topbar-inner">
+            <a class="host-back" href="./"><i class="fa fa-arrow-left"></i> 返回博客</a>
+            <h1 class="host-page-title"><i class="fa fa-picture-o"></i> 图床 <code>media/</code></h1>
+            <div class="host-topbar-actions">
+                <span class="host-auth-chip" id="auth-chip">
+                    <img src="" alt="用户头像" id="auth-avatar">
+                    <i class="fa fa-user"></i>
+                    <span id="auth-name">未登录</span>
+                </span>
+                <button type="button" class="host-btn" id="login-toggle"><i class="fa fa-sign-in"></i> 登录</button>
+                <button type="button" class="host-btn" id="logout-btn" style="display: none;"><i class="fa fa-sign-out"></i> 登出</button>
+                <button type="button" class="host-icon-btn" id="host-refresh" title="重新拉取 media/ 目录"><i class="fa fa-refresh"></i></button>
+                <button type="button" class="host-icon-btn" id="host-copy-all" title="复制当前筛选下的全部直链"><i class="fa fa-clipboard"></i></button>
+            </div>
+        </div>
+
+        <div class="host-login-bar" id="login-bar">
+            <div class="host-login-row">
+                <input type="text" id="token-input" placeholder="粘贴 GitHub Personal Access Token（需要 repo 权限）"
+                       spellcheck="false" autocomplete="off" autocapitalize="off">
+                <button type="button" class="host-btn" id="token-save"><i class="fa fa-check"></i> 保存并校验</button>
+                <p>Token 只存在浏览器 localStorage，和博客页共用同一个；不会上传到任何服务器。未登录也能浏览，上传/删除需要登录。</p>
+            </div>
+        </div>
+    </div>
+
+    <main class="host-main">
+        <p class="host-url-hint">外链地址：<code id="host-base-url">https://hugill-8121.github.io/media/</code>，任意外部页面、Markdown 编辑器都可以直接引用。</p>
+
+        <div class="host-dropzone" id="host-dropzone">
+            <i class="fa fa-cloud-upload host-dropzone-icon"></i>
+            <p class="host-dropzone-text">拖拽图片 / 视频 / 音频 / PDF 到这里，或点击选择文件
+                <span>也支持 Ctrl+V 直接粘贴剪贴板里的图片；上传后会自动提交并给出直链</span>
+            </p>
+            <div class="host-target-row">
+                <label for="host-target">上传到</label>
+                <input type="text" id="host-target" class="host-target-input" list="host-folder-options"
+                       value="media" spellcheck="false" autocomplete="off" placeholder="media 或 media/2026/11">
+                <datalist id="host-folder-options"></datalist>
+            </div>
+        </div>
+
+        <div class="host-toolbar">
+            <input type="text" id="host-search" class="host-search" placeholder="搜索文件名 / 路径">
+            <div class="host-filters" id="host-filters">
+                <button type="button" class="host-filter active" data-kind="all">全部</button>
+                <button type="button" class="host-filter" data-kind="image">图片</button>
+                <button type="button" class="host-filter" data-kind="video">视频</button>
+                <button type="button" class="host-filter" data-kind="audio">音频</button>
+                <button type="button" class="host-filter" data-kind="other">其他</button>
+            </div>
+            <span class="host-count" id="host-count"></span>
+        </div>
+
+        <div class="host-screen" id="host-grid"></div>
+        <div class="host-empty" id="host-empty" style="display: none;">正在读取 media/ 目录...</div>
+        <div class="host-status" id="host-status" style="display: none;"></div>
+    </main>
+
+    <script type="module" src="./assets/js/host/main.js"></script>
+</body>
+</html>

@@ -37,9 +37,11 @@
                 <div class="menu-item disabled" id="api-status-item">
                     <i class="fa fa-bar-chart"></i> 查询API状态
                 </div>
-                <div class="menu-item" id="open-host-btn" title="图床：上传到 media/ 并直接拿 Pages 外链">
+                <a class="menu-item menu-link" id="open-host-btn" href="./host.html" target="_blank" rel="noopener"
+                   title="图床：独立的 media/ 外链管理页（新标签页打开）">
                     <i class="fa fa-picture-o"></i> 图床
-                </div>
+                    <i class="fa fa-external-link menu-link-mark"></i>
+                </a>
                 <div class="menu-item" id="add-blog-item">
                     <i class="fa fa-plus"></i> 新增blog
                 </div>
@@ -107,51 +109,6 @@
                 <button type="button" class="btn-cancel" id="resource-upload-cancel">取消</button>
                 <button type="button" class="btn-confirm" id="resource-upload-choose">选择文件并上传</button>
             </div>
-        </div>
-    </div>
-
-    <!-- 图床：media/ 目录的对外直链面板（上传、浏览、复制外链、删除） -->
-    <div class="host-modal" id="host-modal">
-        <div class="host-panel">
-            <div class="host-panel-header">
-                <h3 class="host-panel-title"><i class="fa fa-picture-o"></i> 图床 · <code>media/</code></h3>
-                <div class="host-panel-actions">
-                    <button type="button" class="host-icon-btn" id="host-refresh" title="重新拉取 media/ 目录"><i class="fa fa-refresh"></i></button>
-                    <button type="button" class="host-icon-btn" id="host-copy-all" title="复制当前筛选下的全部直链"><i class="fa fa-clipboard"></i></button>
-                    <button type="button" class="host-icon-btn" id="host-close" title="关闭"><i class="fa fa-times"></i></button>
-                </div>
-            </div>
-
-            <p class="host-url-hint">外链地址：<code id="host-base-url">https://hugill-8121.github.io/media/</code>，任意外部页面、Markdown 编辑器都可以直接引用。</p>
-
-            <div class="host-dropzone" id="host-dropzone">
-                <i class="fa fa-cloud-upload host-dropzone-icon"></i>
-                <p class="host-dropzone-text">拖拽图片 / 视频 / 音频 / PDF 到这里，或点击选择文件
-                    <span>也支持 Ctrl+V 直接粘贴剪贴板里的图片；上传后会自动提交并给出直链</span>
-                </p>
-                <div class="host-target-row">
-                    <label for="host-target">上传到</label>
-                    <input type="text" id="host-target" class="host-target-input" list="host-folder-options"
-                           value="media" spellcheck="false" autocomplete="off" placeholder="media 或 media/2026/11">
-                    <datalist id="host-folder-options"></datalist>
-                </div>
-            </div>
-
-            <div class="host-toolbar">
-                <input type="text" id="host-search" class="host-search" placeholder="搜索文件名 / 路径">
-                <div class="host-filters" id="host-filters">
-                    <button type="button" class="host-filter active" data-kind="all">全部</button>
-                    <button type="button" class="host-filter" data-kind="image">图片</button>
-                    <button type="button" class="host-filter" data-kind="video">视频</button>
-                    <button type="button" class="host-filter" data-kind="audio">音频</button>
-                    <button type="button" class="host-filter" data-kind="other">其他</button>
-                </div>
-                <span class="host-count" id="host-count"></span>
-            </div>
-
-            <div class="host-grid" id="host-grid"></div>
-            <div class="host-empty" id="host-empty" style="display: none;">还没有资源，上传第一张图试试。</div>
-            <div class="host-status" id="host-status" style="display: none;"></div>
         </div>
     </div>
 

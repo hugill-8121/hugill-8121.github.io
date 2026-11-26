@@ -93,22 +93,7 @@ export const dom = {
     // 资源提交
     resourceCommitBtn: document.getElementById('commit-resources'),
     pendingResourceCount: document.getElementById('pending-resource-count'),
-    // 图床面板
-    openHostBtn: document.getElementById('open-host-btn'),
-    hostModal: document.getElementById('host-modal'),
-    hostClose: document.getElementById('host-close'),
-    hostRefresh: document.getElementById('host-refresh'),
-    hostCopyAll: document.getElementById('host-copy-all'),
-    hostBaseUrl: document.getElementById('host-base-url'),
-    hostDropzone: document.getElementById('host-dropzone'),
-    hostTarget: document.getElementById('host-target'),
-    hostFolderOptions: document.getElementById('host-folder-options'),
-    hostSearch: document.getElementById('host-search'),
-    hostFilters: document.getElementById('host-filters'),
-    hostGrid: document.getElementById('host-grid'),
-    hostEmpty: document.getElementById('host-empty'),
-    hostCount: document.getElementById('host-count'),
-    hostStatus: document.getElementById('host-status'),
+    // 图床已独立成 host.html，菜单入口是普通链接（见 index.html 的 #open-host-btn）
     // 底部个人介绍栏
     siteFooter: document.getElementById('site-footer'),
     footerAvatar: document.getElementById('footer-avatar'),
