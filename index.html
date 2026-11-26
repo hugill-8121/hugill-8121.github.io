@@ -267,6 +267,11 @@
                             <label for="edit-content">文章内容（Markdown）</label>
                             <textarea id="edit-content" class="modal-textarea" style="height: 400px;"></textarea>
                         </div>
+                        <!-- 自定义提交信息：留空时使用默认（新增博客: 标题 / 更新博客: 标题），占位符实时显示默认值 -->
+                        <div class="form-group">
+                            <label for="edit-commit-message">提交信息（commit message）</label>
+                            <input type="text" id="edit-commit-message" class="modal-input" placeholder="留空则使用默认提交信息" autocomplete="off">
+                        </div>
                         <div class="edit-actions">
                             <button id="save-edit" class="btn-confirm">保存</button>
                         </div>
@@ -385,6 +390,7 @@
             showError: document.getElementById('show-error'),
             // 博客编辑相关
             editTitle: document.getElementById('edit-title'),
+            editCommitMessage: document.getElementById('edit-commit-message'),
             editTags: document.getElementById('tag-input'),
             tagChips: document.getElementById('tag-chips'),
             tagEditor: document.getElementById('tag-editor'),
@@ -625,6 +631,7 @@
             dom.editFolder.readOnly = !isNew;
             dom.editFolder.title = isNew ? '' : '已有文章的文件路径不可修改';
             document.getElementById('save-edit').textContent = isNew ? '确认新增' : '保存修改';
+            updateCommitMessagePlaceholder();
         }
 
         function showEditContainer() {
@@ -668,7 +675,8 @@
                 blog: tabBlog,
                 isNew,
                 originalTitle: tabBlog.title || '',
-                originalTags: (tabBlog.tags || []).slice()
+                originalTags: (tabBlog.tags || []).slice(),
+                commitMessage: ''
             };
             openTabs.push(newTab);
 
@@ -703,6 +711,8 @@
             renderEditorTags(tabBlog.tags || []);
             dom.editTags.value = '';
             dom.editContent.value = content;
+            dom.editCommitMessage.value = '';
+            updateCommitMessagePlaceholder();
 
             renderTabs();
             showEditContainer();
@@ -794,6 +804,26 @@
             return editorTags.slice();
         }
 
+        // ==================== 提交信息（commit message） ====================
+        // 默认提交信息：新增博客: <标题> / 更新博客: <标题>
+        function defaultCommitMessage(isNew, title) {
+            const subject = String(title || '').trim() || '(未命名)';
+            return `${isNew ? '新增博客' : '更新博客'}: ${subject}`;
+        }
+
+        // 占位符实时显示“本次保存实际会写入的默认提交信息”
+        function updateCommitMessagePlaceholder() {
+            if (!dom.editCommitMessage) return;
+            const tab = openTabs.find(t => t.id === activeTabId);
+            dom.editCommitMessage.placeholder = `留空则使用默认：${defaultCommitMessage(!!(tab && tab.isNew), dom.editTitle.value)}`;
+        }
+
+        // 实际写入 commit 的信息：自定义内容优先（压缩空白、去首尾空白），留空则用默认
+        function resolveCommitMessage(isNew, title) {
+            const custom = String(dom.editCommitMessage?.value || '').replace(/\s+/g, ' ').trim();
+            return custom || defaultCommitMessage(isNew, title);
+        }
+
         // 把当前表单内容写回标签状态，并更新脏标记
         function snapshotActiveTab() {
             if (!activeTabId) return;
@@ -803,6 +833,8 @@
             editedContents.set(activeTabId, dom.editContent.value);
             tab.blog.title = dom.editTitle.value.trim();
             tab.blog.tags = getEditorTags();
+            // 自定义提交信息随标签页保存，切换标签后不丢；不计入脏标记
+            tab.commitMessage = String(dom.editCommitMessage?.value || '').trim();
             if (tab.isNew) {
                 const groupSelect = document.getElementById('edit-group');
                 if (groupSelect) tab.blog.group = groupSelect.value;
@@ -853,6 +885,8 @@
             renderEditorTags(tab.blog.tags || []);
             dom.editTags.value = '';
             dom.editContent.value = editedContents.get(tabId) ?? '';
+            dom.editCommitMessage.value = tab.commitMessage || '';
+            updateCommitMessagePlaceholder();
             currentEditFile = tab.blog;
 
             if (tab.isNew) {
@@ -2693,11 +2727,17 @@
                 if (currentBlog) openFileInTab(currentBlog);
             });
 
-            // 编辑内容变化时实时更新未保存状态
+            // 编辑内容变化时实时更新未保存状态；标题变化时同步刷新默认提交信息的占位符
             [dom.editTitle, dom.editContent].forEach(el => {
                 el.addEventListener('input', () => {
                     if (activeTabId) snapshotActiveTab();
+                    if (el === dom.editTitle) updateCommitMessagePlaceholder();
                 });
+            });
+
+            // 自定义提交信息只跟随标签页保存，不影响脏标记
+            dom.editCommitMessage.addEventListener('input', () => {
+                if (activeTabId) snapshotActiveTab();
             });
 
             // 标签编辑器：回车/逗号添加，退格删除最后一个，失焦时把残留文字也加入
@@ -2848,9 +2888,9 @@
                     batch.add('blog-config.json', configText);
                     const resourceCount = appendPendingResources(batch);
 
-                    const commitResult = await batch.commit(
-                        isNew ? `新增博客: ${title}` : `更新博客: ${title}`
-                    );
+                    // 提交信息：表单里填了就用填写的，留空用默认
+                    const commitMessage = resolveCommitMessage(isNew, title);
+                    const commitResult = await batch.commit(commitMessage);
                     if (!commitResult.success) {
                         throw new Error(commitResult.error);
                     }
@@ -2868,6 +2908,10 @@
                     tab.title = title;
                     tab.originalTitle = title;
                     tab.originalTags = tags.slice();
+                    // 自定义提交信息已随本次提交用掉，下次保存回到默认
+                    tab.commitMessage = '';
+                    dom.editCommitMessage.value = '';
+                    updateCommitMessagePlaceholder();
 
                     // 草稿标签的 id 是临时的，保存后用真实 uuid 作为标签 id，避免重开同一篇时出现重复标签
                     if (tab.id !== uuid) {
@@ -2913,7 +2957,7 @@
 
                     mergedBlog.lastModified = new Date();
                     mergedBlog.committer = dom.usernameDisplay.textContent.trim() || '我';
-                    mergedBlog.commitMessage = isNew ? `新增博客: ${title}` : `更新博客: ${title}`;
+                    mergedBlog.commitMessage = commitMessage;
                     currentBlog = mergedBlog;
 
                     allTags.clear();
