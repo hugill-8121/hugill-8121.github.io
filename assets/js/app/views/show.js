@@ -1,11 +1,11 @@
 // 文章详情：按 uuid/标题定位文章、加载正文与最新 commit 信息。
 
-import { config, state } from './state.js';
-import { dom } from './dom.js';
-import { encodePath, getGithubToken } from './utils.js';
-import { handleAuthFailure } from './auth.js';
-import { createOctokit, fetchRepoFileText, isAuthError } from '../github-api.js';
-import { loadBlogContent, renderMarkdown, switchToShow } from '../blog-utils.js';
+import { config, state } from '../core/state.js';
+import { dom } from '../core/dom.js';
+import { encodePath, getGithubToken } from '../core/utils.js';
+import { handleAuthFailure } from '../core/auth.js';
+import { createOctokit, fetchRepoFileText, isAuthError } from '../../lib/github-api.js';
+import { loadBlogContent, renderMarkdown, switchToShow } from '../../lib/blog-utils.js';
 
 
 // 根据标题/uuid 显示博客

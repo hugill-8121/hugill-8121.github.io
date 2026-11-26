@@ -1,12 +1,12 @@
 // 资源栏视图：树渲染、展开折叠、拖拽移动/重命名、右键菜单、搜索过滤。
 
-import { state } from './state.js';
-import { dom } from './dom.js';
-import { getGithubToken, showToast } from './utils.js';
+import { state } from '../core/state.js';
+import { dom } from '../core/dom.js';
+import { getGithubToken, showToast } from '../core/utils.js';
 import { renderFileTree } from './file-tree.js';
-import { RESOURCE_ROOT, buildResourceTree, loadResourcePaths } from './repo-tree.js';
-import { deleteResourceFile, deleteResourceFolder, getFileIcon, pendingResourceCount, pickResourceFiles, queueResourceFolder, rawResourceUrl, refreshResourceUploadFolders, updatePendingResourceBadge } from './resource-queue.js';
-import { escapeHtml } from '../blog-utils.js';
+import { RESOURCE_ROOT, buildResourceTree, loadResourcePaths } from '../data/repo-tree.js';
+import { deleteResourceFile, deleteResourceFolder, getFileIcon, pendingResourceCount, pickResourceFiles, queueResourceFolder, rawResourceUrl, refreshResourceUploadFolders, updatePendingResourceBadge } from '../data/resource-queue.js';
+import { escapeHtml } from '../../lib/blog-utils.js';
 
 // ==================== 资源文件拖拽移动 / 重命名 ====================
 // 拖动资源树里的文件到另一个文件夹、或右键重命名，都只是“登记待提交”，

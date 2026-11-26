@@ -1,14 +1,14 @@
 // 资源栏队列：上传/新建目录/删除只登记，点“提交资源”或保存文章时一次提交。
 
-import { config, state } from './state.js';
-import { dom } from './dom.js';
-import { getGithubToken, readFileAsBase64 } from './utils.js';
-import { renderBlogs, renderMonthList, renderTags } from './list.js';
-import { renderFileTree } from './file-tree.js';
+import { config, state } from '../core/state.js';
+import { dom } from '../core/dom.js';
+import { getGithubToken, readFileAsBase64 } from '../core/utils.js';
+import { renderBlogs, renderMonthList, renderTags } from '../views/list.js';
+import { renderFileTree } from '../views/file-tree.js';
 import { RESOURCE_ROOT } from './repo-tree.js';
-import { applyCommittedResourceMoves, findPendingResourceMove, isResourcePathTaken, renderResourceTreeFromCache } from './resource-tree.js';
-import { CommitBatch, createOctokit, fetchBlogConfig } from '../github-api.js';
-import { findBlogEntry, serializeBlogConfig } from '../blog-config.js';
+import { applyCommittedResourceMoves, findPendingResourceMove, isResourcePathTaken, renderResourceTreeFromCache } from '../views/resource-tree.js';
+import { CommitBatch, createOctokit, fetchBlogConfig } from '../../lib/github-api.js';
+import { findBlogEntry, serializeBlogConfig } from '../../lib/blog-config.js';
 
 export function refreshResourceUploadFolders() {
     const select = dom.resourceUploadFolder;

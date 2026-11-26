@@ -1,11 +1,11 @@
 // 资源工具条、上传弹窗、拖拽移动等事件绑定。
 
-import { state } from './state.js';
-import { dom } from './dom.js';
-import { getGithubToken } from './utils.js';
-import { RESOURCE_ROOT } from './repo-tree.js';
-import { endResourceDrag, filterResourceItems, isResourceMoveTargetAllowed, moveResourceFile } from './resource-tree.js';
-import { closeResourceUploadModal, commitPendingResources, commitPendingVisibility, openResourceUploadModal, pickResourceFiles, queueResourceFolder, updateResourceUploadHint } from './resource-queue.js';
+import { state } from '../core/state.js';
+import { dom } from '../core/dom.js';
+import { getGithubToken } from '../core/utils.js';
+import { RESOURCE_ROOT } from '../data/repo-tree.js';
+import { endResourceDrag, filterResourceItems, isResourceMoveTargetAllowed, moveResourceFile } from '../views/resource-tree.js';
+import { closeResourceUploadModal, commitPendingResources, commitPendingVisibility, openResourceUploadModal, pickResourceFiles, queueResourceFolder, updateResourceUploadHint } from '../data/resource-queue.js';
 
 export function bindResourceEvents() {
     // 资源搜索事件

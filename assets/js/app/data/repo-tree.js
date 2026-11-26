@@ -1,10 +1,10 @@
 // 仓库树：一次递归抓取并缓存（5 分钟 TTL），资源栏与文件栏共用同一份。
 
-import { config, state } from './state.js';
-import { getGithubToken } from './utils.js';
-import { handleAuthFailure } from './auth.js';
-import { loadFoldersForEdit } from './editor.js';
-import { createOctokit, isAuthError, listRepoPaths } from '../github-api.js';
+import { config, state } from '../core/state.js';
+import { getGithubToken } from '../core/utils.js';
+import { handleAuthFailure } from '../core/auth.js';
+import { loadFoldersForEdit } from '../views/editor.js';
+import { createOctokit, isAuthError, listRepoPaths } from '../../lib/github-api.js';
 
 // ==================== 资源栏（media 目录） ====================
 

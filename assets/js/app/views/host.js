@@ -1,10 +1,10 @@
 // 图床：把仓库 media/ 目录封装成对外可用的图床——上传即得 Pages 直链，站外页面/编辑器可直接引用。
 
-import { config, state } from './state.js';
-import { dom } from './dom.js';
-import { encodePath, getGithubToken, readFileAsBase64, showToast } from './utils.js';
-import { loadRepoTreeOnce } from './repo-tree.js';
-import { CommitBatch, createOctokit } from '../github-api.js';
+import { config, state } from '../core/state.js';
+import { dom } from '../core/dom.js';
+import { encodePath, getGithubToken, readFileAsBase64, showToast } from '../core/utils.js';
+import { loadRepoTreeOnce } from '../data/repo-tree.js';
+import { CommitBatch, createOctokit } from '../../lib/github-api.js';
 
 const HOST_ROOT = 'media';
 const WARN_MB = 5;

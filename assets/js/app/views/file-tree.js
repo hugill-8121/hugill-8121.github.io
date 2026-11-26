@@ -1,12 +1,12 @@
 // 左侧文件栏：blog 目录树渲染、展开状态、右键菜单、新建目录。
 
-import { config, state } from './state.js';
-import { dom } from './dom.js';
-import { getGithubToken, showToast } from './utils.js';
+import { config, state } from '../core/state.js';
+import { dom } from '../core/dom.js';
+import { getGithubToken, showToast } from '../core/utils.js';
 import { loadFoldersForEdit, openFileInTab } from './editor.js';
-import { updateVisibilityCommitBadge } from './resource-queue.js';
-import { CommitBatch, createOctokit } from '../github-api.js';
-import { escapeHtml } from '../blog-utils.js';
+import { updateVisibilityCommitBadge } from '../data/resource-queue.js';
+import { CommitBatch, createOctokit } from '../../lib/github-api.js';
+import { escapeHtml } from '../../lib/blog-utils.js';
 
 // ==================== 左侧文件栏（blog 目录） ====================
 // 记住已展开的文件夹（相对 blog/ 的路径）。重新渲染（打开/保存文章）时保持用户的展开状态，

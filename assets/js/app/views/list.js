@@ -1,10 +1,10 @@
 // 首页列表：配置加载、commit 信息缓存、标签云、月份筛选、文章卡片。
 
-import { config, state } from './state.js';
-import { dom } from './dom.js';
-import { getGithubToken, setPageFavicon } from './utils.js';
-import { loadRepoTreeOnce } from './repo-tree.js';
-import { batchGetFileCommits } from '../github-api.js';
+import { config, state } from '../core/state.js';
+import { dom } from '../core/dom.js';
+import { getGithubToken, setPageFavicon } from '../core/utils.js';
+import { loadRepoTreeOnce } from '../data/repo-tree.js';
+import { batchGetFileCommits } from '../../lib/github-api.js';
 
 // 加载博客配置
 export async function loadBlogSettings() {

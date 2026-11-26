@@ -1,14 +1,14 @@
 // 顶部导航、登录菜单、API 限额弹窗、时间筛选等事件绑定。
 
-import { state } from './state.js';
-import { dom } from './dom.js';
-import { getGithubToken, safeSetStorage, showToast } from './utils.js';
-import { applyLoggedInUI, handleAuthFailure, updateLoginState } from './auth.js';
-import { initBlog, renderBlogs, renderMonthList } from './list.js';
-import { openFileInTab, openNewBlogMode } from './editor.js';
-import { createBlogFolder } from './file-tree.js';
-import { renderResourceTree } from './resource-tree.js';
-import { getRateLimit, getUserInfo, getUserInfoWithMeta, isAuthError, sanitizeToken } from '../github-api.js';
+import { state } from '../core/state.js';
+import { dom } from '../core/dom.js';
+import { getGithubToken, safeSetStorage, showToast } from '../core/utils.js';
+import { applyLoggedInUI, handleAuthFailure, updateLoginState } from '../core/auth.js';
+import { initBlog, renderBlogs, renderMonthList } from '../views/list.js';
+import { openFileInTab, openNewBlogMode } from '../views/editor.js';
+import { createBlogFolder } from '../views/file-tree.js';
+import { renderResourceTree } from '../views/resource-tree.js';
+import { getRateLimit, getUserInfo, getUserInfoWithMeta, isAuthError, sanitizeToken } from '../../lib/github-api.js';
 
 // 隐藏右键菜单
 document.addEventListener('click', () => {

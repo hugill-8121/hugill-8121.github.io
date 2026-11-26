@@ -27,26 +27,31 @@
 │  ├─ css/style.css      全部样式
 │  ├─ images/favicon.svg 默认站点图标
 │  └─ js/
-│     ├─ github-api.js   Octokit 封装 + CommitBatch 原子提交 + 文件读取
-│     ├─ blog-config.js  配置读取、base64 解码等工具
-│     ├─ blog-utils.js   Markdown 渲染、容器切换等
-│     └─ app/            单页应用的业务模块（入口 main.js）
-│        ├─ main.js           启动编排：读配置、校验登录、渲染首页/详情、绑事件
-│        ├─ state.js          全部共享可变状态（state 对象）与仓库配置 config
-│        ├─ dom.js            DOM 引用表，页面结构改这里
-│        ├─ utils.js          路径编码、localStorage、Token、toast、favicon
-│        ├─ auth.js           登录校验、登录/登出 UI、Token 失效降级匿名
-│        ├─ list.js           首页列表：配置、commit 缓存、标签云、月份、卡片
-│        ├─ show.js           文章详情：定位文章、正文、最新 commit
-│        ├─ editor.js         编辑区：标签页、表单快照/脏标记、标签 chip、分类目录候选
-│        ├─ file-tree.js      左侧文件栏（blog 目录树）
-│        ├─ repo-tree.js      仓库树抓取与缓存（资源栏、文件栏共用）
-│        ├─ resource-tree.js  资源栏视图：树渲染、拖拽移动/重命名、右键菜单、搜索
-│        ├─ resource-queue.js 资源待提交队列：上传/新建/删除登记与一次提交
-│        ├─ host.js           图床：media/ 上传、直链复制、图墙浏览、删除
-│        ├─ events-nav.js     导航、登录菜单、API 限额、时间筛选的事件绑定
-│        ├─ events-editor.js  编辑表单与保存流程的事件绑定
-│        └─ events-resource.js 资源工具条、上传弹窗、拖拽的事件绑定
+│     ├─ lib/            与页面无关的底层封装
+│     │  ├─ github-api.js   Octokit 封装 + CommitBatch 原子提交 + 文件读取
+│     │  ├─ blog-config.js  配置读取、base64 解码等工具
+│     │  └─ blog-utils.js   Markdown 渲染、容器切换等
+│     └─ app/            单页应用（入口 app/main.js）
+│        ├─ main.js      启动编排：读配置、校验登录、渲染首页/详情、绑事件
+│        ├─ core/        共享基础设施
+│        │  ├─ state.js    全部共享可变状态（state 对象）与仓库配置 config
+│        │  ├─ dom.js      DOM 引用表，页面结构改这里
+│        │  ├─ utils.js    路径编码、localStorage、Token、toast、favicon、读文件
+│        │  └─ auth.js     登录校验、登录/登出 UI、Token 失效降级匿名
+│        ├─ data/        GitHub 数据与待提交队列
+│        │  ├─ repo-tree.js      仓库树抓取与缓存（资源栏、文件栏共用）
+│        │  └─ resource-queue.js 资源待提交队列：上传/新建/删除登记与一次提交
+│        ├─ views/       各页面的渲染与业务
+│        │  ├─ list.js           首页列表：配置、commit 缓存、标签云、月份、卡片
+│        │  ├─ show.js           文章详情：定位文章、正文、最新 commit
+│        │  ├─ editor.js         编辑区：标签页、表单快照/脏标记、标签 chip、分类目录候选
+│        │  ├─ file-tree.js      左侧文件栏（blog 目录树）
+│        │  ├─ resource-tree.js  资源栏视图：树渲染、拖拽移动/重命名、右键菜单、搜索
+│        │  └─ host.js           图床：media/ 上传、直链复制、图墙浏览、删除
+│        └─ events/      事件绑定，按区域拆开
+│           ├─ nav.js      导航、登录菜单、API 限额、时间筛选
+│           ├─ editor.js   编辑表单与保存流程
+│           └─ resource.js 资源工具条、上传弹窗、拖拽
 ├─ .gitignore            忽略 .git_api
 └─ .git_api              本地保存的 GitHub Token（**不要提交**）
 ```
@@ -136,7 +141,7 @@
 
 ## 写仓库的机制
 
-`assets/js/github-api.js` 里的 `CommitBatch` 负责所有写操作：
+`assets/js/lib/github-api.js` 里的 `CommitBatch` 负责所有写操作：
 
 1. 把要写入的内容建成 blob；
 2. 基于当前分支的最新 tree 生成新 tree（新增 / 替换条目、`sha: null` 表示删除）；

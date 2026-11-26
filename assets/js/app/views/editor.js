@@ -1,10 +1,10 @@
 // 编辑区：多标签页、表单快照与脏标记、标签 chip、commit message、分类/目录候选。
 
-import { config, state } from './state.js';
-import { dom } from './dom.js';
+import { config, state } from '../core/state.js';
+import { dom } from '../core/dom.js';
 import { renderFileTree } from './file-tree.js';
 import { renderResourceTree } from './resource-tree.js';
-import { escapeHtml } from '../blog-utils.js';
+import { escapeHtml } from '../../lib/blog-utils.js';
 
 // ==================== 编辑界面相关函数 ====================
 

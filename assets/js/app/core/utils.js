@@ -1,7 +1,7 @@
 // 通用工具：路径编码、localStorage、Token、toast、favicon、URL 参数。
 
 import { state } from './state.js';
-import { sanitizeToken } from '../github-api.js';
+import { sanitizeToken } from '../../lib/github-api.js';
 
 // 仓库路径分段编码（兼容中文 / 空格）
 export function encodePath(path) {

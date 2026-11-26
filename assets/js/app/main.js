@@ -1,17 +1,17 @@
 // 页面入口：只负责启动编排，业务逻辑都在同目录下的各个模块里。
 // index.html 只保留 <script type="module" src="./assets/js/app/main.js">。
 
-import { config, state } from './state.js';
-import { dom } from './dom.js';
-import { getUrlParams, setPageFavicon } from './utils.js';
-import { checkLoginStatus } from './auth.js';
-import { initBlog, loadBlogSettings } from './list.js';
-import { showBlogByIdentity, showFreshBlogFromUrl } from './show.js';
-import { refreshResourceUploadFolders } from './resource-queue.js';
-import { bindNavEvents } from './events-nav.js';
-import { bindEditorEvents } from './events-editor.js';
-import { bindResourceEvents } from './events-resource.js';
-import { bindHostEvents } from './host.js';
+import { config, state } from './core/state.js';
+import { dom } from './core/dom.js';
+import { getUrlParams, setPageFavicon } from './core/utils.js';
+import { checkLoginStatus } from './core/auth.js';
+import { initBlog, loadBlogSettings } from './views/list.js';
+import { showBlogByIdentity, showFreshBlogFromUrl } from './views/show.js';
+import { refreshResourceUploadFolders } from './data/resource-queue.js';
+import { bindNavEvents } from './events/nav.js';
+import { bindEditorEvents } from './events/editor.js';
+import { bindResourceEvents } from './events/resource.js';
+import { bindHostEvents } from './views/host.js';
 
 console.log('GitHub 配置:', config);
 

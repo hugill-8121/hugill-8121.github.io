@@ -1,16 +1,16 @@
 // 编辑表单与保存流程的事件绑定。
 
-import { config, state } from './state.js';
-import { dom } from './dom.js';
-import { getGithubToken } from './utils.js';
-import { renderBlogs, renderMonthList, renderTags } from './list.js';
-import { buildBlogShowUrl } from './show.js';
-import { addEditorTag, createNewCategory, getBlogFolder, getEditorTags, removeEditorTag, renderTabs, resolveCommitMessage, showEditStatus, snapshotActiveTab, updateCommitMessagePlaceholder } from './editor.js';
-import { renderFileTree } from './file-tree.js';
-import { applyCommittedResourceMoves, renderResourceTreeFromCache } from './resource-tree.js';
-import { appendPendingResources, updatePendingResourceBadge } from './resource-queue.js';
-import { CommitBatch, createOctokit, fetchBlogConfig } from '../github-api.js';
-import { findBlogEntry, makeUuid, serializeBlogConfig, upsertBlogEntry } from '../blog-config.js';
+import { config, state } from '../core/state.js';
+import { dom } from '../core/dom.js';
+import { getGithubToken } from '../core/utils.js';
+import { renderBlogs, renderMonthList, renderTags } from '../views/list.js';
+import { buildBlogShowUrl } from '../views/show.js';
+import { addEditorTag, createNewCategory, getBlogFolder, getEditorTags, removeEditorTag, renderTabs, resolveCommitMessage, showEditStatus, snapshotActiveTab, updateCommitMessagePlaceholder } from '../views/editor.js';
+import { renderFileTree } from '../views/file-tree.js';
+import { applyCommittedResourceMoves, renderResourceTreeFromCache } from '../views/resource-tree.js';
+import { appendPendingResources, updatePendingResourceBadge } from '../data/resource-queue.js';
+import { CommitBatch, createOctokit, fetchBlogConfig } from '../../lib/github-api.js';
+import { findBlogEntry, makeUuid, serializeBlogConfig, upsertBlogEntry } from '../../lib/blog-config.js';
 
 export function bindEditorEvents() {
     // 编辑内容变化时实时更新未保存状态；标题变化时同步刷新默认提交信息的占位符

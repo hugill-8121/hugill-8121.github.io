@@ -3,8 +3,8 @@
 import { state } from './state.js';
 import { dom } from './dom.js';
 import { getGithubToken, safeClearToken, setFaviconToAvatar, setPageFavicon, showToast } from './utils.js';
-import { renderResourceTree } from './resource-tree.js';
-import { getUserInfo, isAuthError } from '../github-api.js';
+import { renderResourceTree } from '../views/resource-tree.js';
+import { getUserInfo, isAuthError } from '../../lib/github-api.js';
 
 // Token 失效：清掉本地缓存，降级为匿名读取（公开仓库只读无需 Token）
 export function handleAuthFailure(message) {
