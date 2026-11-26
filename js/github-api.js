@@ -72,6 +72,14 @@ const NO_THROTTLE = {
     onSecondaryRateLimit: () => false
 };
 
+// GitHub API 的响应带 Cache-Control: private, max-age=60：浏览器会把 60 秒内相同的 GET
+// 直接用本地缓存。刚提交过资源再去保存文章时，读到的“分支最新提交”还是缓存里的旧值，
+// 于是提交被拒绝（Update is not a fast forward）；读到旧的 blog-config.json 还会把上一次的修改覆盖掉。
+// Octokit 只透传 request.fetch / signal / redirect，不透传 cache，所以统一用自定义 fetch 绕过 HTTP 缓存。
+function noStoreFetch(url, options) {
+    return globalThis.fetch(url, Object.assign({}, options, { cache: 'no-store' }));
+}
+
 /**
  * 统一的 Octokit 工厂（匿名/带 Token 都可以）
  * @param {string} [token]
@@ -79,7 +87,10 @@ const NO_THROTTLE = {
  */
 export function createOctokit(token) {
     const auth = sanitizeToken(token);
-    return new Octokit(Object.assign(auth ? { auth } : {}, { throttle: NO_THROTTLE }));
+    return new Octokit(Object.assign(auth ? { auth } : {}, {
+        throttle: NO_THROTTLE,
+        request: { fetch: noStoreFetch }
+    }));
 }
 
 function makeRequestError(message, status) {
@@ -90,7 +101,7 @@ function makeRequestError(message, status) {
 
 async function fetchCommitsPage(owner, repo, branch, encodedPath, token, perPage, page) {
     const url = `https://api.github.com/repos/${owner}/${repo}/commits?path=${encodedPath}&ref=${encodeURIComponent(branch)}&per_page=${perPage}&page=${page}`;
-    const response = await fetch(url, { headers: buildHeaders(token) });
+    const response = await fetch(url, { headers: buildHeaders(token), cache: 'no-store' });
 
     if (!response.ok) {
         if (response.status === 404) throw makeRequestError(`文件不存在: ${encodedPath}`, 404);

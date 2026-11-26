@@ -1993,7 +1993,7 @@
             const token = getGithubToken();
             const url = `https://api.github.com/repos/${config.owner}/${config.repo}/commits?path=${encodePath(blogInfo.path)}&ref=${encodeURIComponent(config.branch)}&per_page=1`;
             const read = async (auth) => {
-                const response = await fetch(url, { headers: auth ? { Authorization: `token ${auth}` } : {} });
+                const response = await fetch(url, { headers: auth ? { Authorization: `token ${auth}` } : {}, cache: 'no-store' });
                 if (response.status === 401) {
                     const error = new Error('Bad credentials');
                     error.status = 401;
