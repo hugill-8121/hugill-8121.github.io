@@ -11,6 +11,7 @@ import { refreshResourceUploadFolders } from './resource-queue.js';
 import { bindNavEvents } from './events-nav.js';
 import { bindEditorEvents } from './events-editor.js';
 import { bindResourceEvents } from './events-resource.js';
+import { bindHostEvents } from './host.js';
 
 console.log('GitHub 配置:', config);
 
@@ -36,6 +37,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         bindNavEvents();
         bindEditorEvents();
         bindResourceEvents();
+        bindHostEvents();
         refreshResourceUploadFolders();
     } catch (error) {
         console.error('初始化失败:', error);

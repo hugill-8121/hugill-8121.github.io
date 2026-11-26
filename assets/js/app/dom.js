@@ -92,5 +92,21 @@ export const dom = {
     resDeleteFile: document.getElementById('res-delete-file'),
     // 资源提交
     resourceCommitBtn: document.getElementById('commit-resources'),
-    pendingResourceCount: document.getElementById('pending-resource-count')
+    pendingResourceCount: document.getElementById('pending-resource-count'),
+    // 图床面板
+    openHostBtn: document.getElementById('open-host-btn'),
+    hostModal: document.getElementById('host-modal'),
+    hostClose: document.getElementById('host-close'),
+    hostRefresh: document.getElementById('host-refresh'),
+    hostCopyAll: document.getElementById('host-copy-all'),
+    hostBaseUrl: document.getElementById('host-base-url'),
+    hostDropzone: document.getElementById('host-dropzone'),
+    hostTarget: document.getElementById('host-target'),
+    hostFolderOptions: document.getElementById('host-folder-options'),
+    hostSearch: document.getElementById('host-search'),
+    hostFilters: document.getElementById('host-filters'),
+    hostGrid: document.getElementById('host-grid'),
+    hostEmpty: document.getElementById('host-empty'),
+    hostCount: document.getElementById('host-count'),
+    hostStatus: document.getElementById('host-status')
 };

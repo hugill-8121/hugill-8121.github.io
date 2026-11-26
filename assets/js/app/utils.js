@@ -48,6 +48,20 @@ export function safeClearToken() {
     }
 }
 
+// 读取本地文件为 base64（去掉 data URL 前缀）：资源上传和图床共用
+export function readFileAsBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = String(reader.result || '');
+            const comma = result.indexOf(',');
+            resolve(comma >= 0 ? result.slice(comma + 1) : result);
+        };
+        reader.onerror = () => reject(reader.error || new Error('读取文件失败'));
+        reader.readAsDataURL(file);
+    });
+}
+
 // 轻量提示条，不打断浏览
 let toastTimer = null;
 

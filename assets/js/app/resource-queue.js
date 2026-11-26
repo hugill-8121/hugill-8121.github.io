@@ -2,7 +2,7 @@
 
 import { config, state } from './state.js';
 import { dom } from './dom.js';
-import { getGithubToken } from './utils.js';
+import { getGithubToken, readFileAsBase64 } from './utils.js';
 import { renderBlogs, renderMonthList, renderTags } from './list.js';
 import { renderFileTree } from './file-tree.js';
 import { RESOURCE_ROOT } from './repo-tree.js';
@@ -208,20 +208,6 @@ export function pickResourceFiles(folderPath = RESOURCE_ROOT) {
         }
     };
     input.click();
-}
-
-// 读取文件为 Base64（去掉 data URL 前缀）
-function readFileAsBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const result = String(reader.result || '');
-            const comma = result.indexOf(',');
-            resolve(comma >= 0 ? result.slice(comma + 1) : result);
-        };
-        reader.onerror = () => reject(reader.error || new Error('读取文件失败'));
-        reader.readAsDataURL(file);
-    });
 }
 
 // 加入待提交队列（真正提交由“提交资源”按钮或保存文章时触发）
