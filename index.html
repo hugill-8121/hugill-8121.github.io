@@ -1842,16 +1842,6 @@
             relocateResourceFile(filePath, `${folder}/${nextName}`);
         }
 
-        // 移除“已有远端内容”的待创建文件夹（它们不再需要 .gitkeep 占位）
-        function prunePendingResourceFolders() {
-            pendingResourceFolders.forEach((meta, path) => {
-                const hasPendingFile = Array.from(pendingResourceFiles.keys()).some(p => p.startsWith(path + '/'));
-                const hasRemoteFile = resourceRemotePaths.some(item => item.type === 'file' && item.path.startsWith(path + '/'))
-                    || Array.from(pendingResourceMoves.values()).some(move => move.path.startsWith(path + '/'));
-                if (!hasPendingFile && hasRemoteFile) pendingResourceFolders.delete(path);
-            });
-        }
-
         // 提交成功后把移动/重命名结果写回本地缓存
         function applyCommittedResourceMoves(movedEntries) {
             movedEntries.forEach(([fromPath, meta]) => {
