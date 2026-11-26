@@ -230,21 +230,59 @@ function renderHostGrid() {
 
 // ==================== 数据 ====================
 
+// GitHub API 走不通时（匿名 60 次/小时的限流最常见）改用 jsDelivr 的公开文件清单，
+// 只读元数据、不依赖 Token，列表照样能出来
+async function loadMediaFromJsdelivr() {
+    const url = `https://data.jsdelivr.com/v1/packages/gh/${config.owner}/${config.repo}@${config.branch}`;
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) throw new Error(`jsDelivr 清单请求失败（HTTP ${response.status}）`);
+    const data = await response.json();
+    const root = (data.files || []).find(entry => entry.type === 'directory' && entry.name === HOST_ROOT);
+    if (!root) return [];
+
+    const items = [];
+    const walk = (node, prefix) => {
+        (node.files || []).forEach(entry => {
+            const path = `${prefix}/${entry.name}`;
+            if (entry.type === 'directory') {
+                walk(entry, path);
+                return;
+            }
+            if (path.endsWith('/.gitkeep')) return;
+            items.push({ path, name: entry.name, size: entry.size || 0 });
+        });
+    };
+    walk(root, HOST_ROOT);
+    return items;
+}
+
 async function loadHostItems(force = false) {
     setStatus('正在读取 media/ 目录...');
+    let items;
+    let fallbackUsed = false;
     try {
-        const items = await loadRepoTreeOnce(force);
-        hostItems = items
-            .filter(item => item.type === 'file' && item.path.startsWith(HOST_ROOT + '/') && !item.path.endsWith('/.gitkeep'))
-            .map(item => ({ path: item.path, name: item.path.split('/').pop(), size: item.size || 0 }))
-            .sort((a, b) => a.path.localeCompare(b.path, 'zh'));
-        hostLoaded = true;
-        renderHostGrid();
-        setStatus('');
+        items = await loadRepoTreeOnce(force);
     } catch (error) {
-        console.error('读取 media/ 失败:', error);
-        setStatus(`读取 media/ 失败: ${error.message || error}`, true);
+        console.warn('仓库树读取失败，改用 jsDelivr 文件清单:', error);
+        try {
+            items = await loadMediaFromJsdelivr();
+            fallbackUsed = true;
+        } catch (fallbackError) {
+            console.error('读取 media/ 失败:', fallbackError);
+            setStatus(`读取 media/ 失败: ${error.message || error}；备用清单也失败：${fallbackError.message || fallbackError}`, true);
+            return;
+        }
     }
+
+    hostItems = items
+        .filter(item => (item.type ? item.type === 'file' : true)
+            && item.path.startsWith(HOST_ROOT + '/')
+            && !item.path.endsWith('/.gitkeep'))
+        .map(item => ({ path: item.path, name: item.name || item.path.split('/').pop(), size: item.size || 0 }))
+        .sort((a, b) => a.path.localeCompare(b.path, 'zh'));
+    hostLoaded = true;
+    renderHostGrid();
+    setStatus(fallbackUsed ? 'GitHub API 匿名限流，已改用 jsDelivr 文件清单（内容一致）' : '');
 }
 
 // ==================== 上传 / 删除 ====================
@@ -316,10 +354,21 @@ async function uploadFiles(fileList) {
         const result = await batch.commit(`图床上传: ${picked.length} 个文件`);
         if (!result.success) throw new Error(result.error || '提交失败');
 
-        setStatus('已提交，正在刷新列表...');
-        await loadHostItems(true);
+        // 提交成功：新文件直接并进本地列表（不再额外打一次 GitHub API 刷新）
+        picked.forEach(item => {
+            const entry = { path: item.path, name: item.file.name, size: item.file.size };
+            const index = hostItems.findIndex(exist => exist.path === entry.path);
+            if (index >= 0) hostItems[index] = entry;
+            else hostItems.push(entry);
+            if (state.repoTreeState.items && !state.repoTreeState.items.some(exist => exist.path === entry.path)) {
+                state.repoTreeState.items.push({ path: entry.path, type: 'file', size: entry.size });
+            }
+        });
+        hostItems.sort((a, b) => a.path.localeCompare(b.path, 'zh'));
+        hostLoaded = true;
+        renderHostGrid();
         await copyText(hostUrlFor(picked[0].path), `已上传 ${picked.length} 个文件，首个直链已复制`);
-        setStatus(picked.length > 1 ? `已上传 ${picked.length} 个文件` : '');
+        setStatus(picked.length > 1 ? `已上传 ${picked.length} 个文件（Pages 重建后外链生效）` : '已上传（Pages 重建后外链生效）');
     } catch (error) {
         console.error('图床上传失败:', error);
         setStatus(`上传失败: ${error.message || error}`, true);
