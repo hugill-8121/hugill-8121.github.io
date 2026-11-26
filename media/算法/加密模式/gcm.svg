@@ -15,7 +15,7 @@
   <text x="85" y="93" text-anchor="middle" font-size="12">Nonce</text>
 
   <line x1="130" y1="88" x2="186" y2="88" stroke="#333" marker-end="url(#arrow)"/>
-  <text x="132" y="82" text-anchor="middle"font-size="9" fill="#c62828">‖0³¹‖1</text>
+  <text x="132" y="82" font-size="9" fill="#c62828">‖0³¹‖1</text>
 
   <rect x="190" y="70" width="90" height="36" rx="6" fill="#f3e5f5" stroke="#333"/>
   <text x="235" y="93" text-anchor="middle" font-size="12">IV+1</text>
