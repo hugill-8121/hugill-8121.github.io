@@ -1,4 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="680" height="540" viewBox="0 0 680 540" font-family="Arial, sans-serif" font-size="14">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#333"/>
+    </marker>
+  </defs>
+
   <text x="340" y="24" text-anchor="middle" font-size="16" font-weight="bold">CFB 加密与解密</text>
 
   <!-- ================= 加密部分 ================= -->
@@ -13,12 +19,9 @@
   <text x="495" y="83" text-anchor="middle">明文 P3</text>
 
   <!-- 明文 -> 异或 -->
-  <line x1="195" y1="96" x2="195" y2="128" stroke="#333"/>
-  <polygon points="189,128 201,128 195,136" fill="#333"/>
-  <line x1="345" y1="96" x2="345" y2="128" stroke="#333"/>
-  <polygon points="339,128 351,128 345,136" fill="#333"/>
-  <line x1="495" y1="96" x2="495" y2="128" stroke="#333"/>
-  <polygon points="489,128 501,128 495,136" fill="#333"/>
+  <line x1="195" y1="96" x2="195" y2="136" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="345" y1="96" x2="345" y2="136" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="495" y1="96" x2="495" y2="136" stroke="#333" marker-end="url(#arrow)"/>
 
   <!-- 异或行 -->
   <circle cx="195" cy="150" r="14" fill="#fff" stroke="#333"/>
@@ -29,12 +32,9 @@
   <text x="495" y="155" text-anchor="middle" font-size="14">+</text>
 
   <!-- 异或 -> 密文 -->
-  <line x1="195" y1="164" x2="195" y2="196" stroke="#333"/>
-  <polygon points="189,196 201,196 195,204" fill="#333"/>
-  <line x1="345" y1="164" x2="345" y2="196" stroke="#333"/>
-  <polygon points="339,196 351,196 345,204" fill="#333"/>
-  <line x1="495" y1="164" x2="495" y2="196" stroke="#333"/>
-  <polygon points="489,196 501,196 495,204" fill="#333"/>
+  <line x1="195" y1="164" x2="195" y2="204" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="345" y1="164" x2="345" y2="204" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="495" y1="164" x2="495" y2="204" stroke="#333" marker-end="url(#arrow)"/>
 
   <!-- 密文行 -->
   <rect x="140" y="210" width="110" height="36" rx="6" fill="#e8f5e9" stroke="#333"/>
@@ -47,21 +47,19 @@
   <!-- IV -> 第一个异或（黑线） -->
   <rect x="20" y="132" width="70" height="36" rx="6" fill="#f3e5f5" stroke="#333"/>
   <text x="55" y="155" text-anchor="middle">IV</text>
-  <line x1="90" y1="150" x2="181" y2="150" stroke="#333"/>
+  <line x1="90" y1="150" x2="181" y2="150" stroke="#333" marker-end="url(#arrow)"/>
   <text x="120" y="144" font-size="12" fill="#c62828">enc</text>
 
   <!-- C1 右侧引出 -> 第二个异或（黑线） -->
   <line x1="250" y1="228" x2="270" y2="228" stroke="#333"/>
   <line x1="270" y1="228" x2="270" y2="150" stroke="#333"/>
-  <line x1="270" y1="150" x2="331" y2="150" stroke="#333"/>
-  <polygon points="331,144 331,156 339,150" fill="#333"/>
+  <line x1="270" y1="150" x2="331" y2="150" stroke="#333" marker-end="url(#arrow)"/>
   <text x="278" y="142" font-size="12" fill="#c62828">enc</text>
 
   <!-- C2 右侧引出 -> 第三个异或（黑线） -->
   <line x1="400" y1="228" x2="420" y2="228" stroke="#333"/>
   <line x1="420" y1="228" x2="420" y2="150" stroke="#333"/>
-  <line x1="420" y1="150" x2="481" y2="150" stroke="#333"/>
-  <polygon points="481,144 481,156 489,150" fill="#333"/>
+  <line x1="420" y1="150" x2="481" y2="150" stroke="#333" marker-end="url(#arrow)"/>
   <text x="428" y="142" font-size="12" fill="#c62828">enc</text>
 
   <line x1="20" y1="290" x2="660" y2="290" stroke="#ccc" stroke-dasharray="6,4"/>
@@ -78,12 +76,9 @@
   <text x="495" y="353" text-anchor="middle">密文 C3</text>
 
   <!-- 密文 -> 异或 -->
-  <line x1="195" y1="366" x2="195" y2="398" stroke="#333"/>
-  <polygon points="189,398 201,398 195,406" fill="#333"/>
-  <line x1="345" y1="366" x2="345" y2="398" stroke="#333"/>
-  <polygon points="339,398 351,398 345,406" fill="#333"/>
-  <line x1="495" y1="366" x2="495" y2="398" stroke="#333"/>
-  <polygon points="489,398 501,398 495,406" fill="#333"/>
+  <line x1="195" y1="366" x2="195" y2="406" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="345" y1="366" x2="345" y2="406" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="495" y1="366" x2="495" y2="406" stroke="#333" marker-end="url(#arrow)"/>
 
   <!-- 异或行 -->
   <circle cx="195" cy="420" r="14" fill="#fff" stroke="#333"/>
@@ -94,12 +89,9 @@
   <text x="495" y="425" text-anchor="middle" font-size="14">+</text>
 
   <!-- 异或 -> 明文 -->
-  <line x1="195" y1="434" x2="195" y2="466" stroke="#333"/>
-  <polygon points="189,466 201,466 195,474" fill="#333"/>
-  <line x1="345" y1="434" x2="345" y2="466" stroke="#333"/>
-  <polygon points="339,466 351,466 345,474" fill="#333"/>
-  <line x1="495" y1="434" x2="495" y2="466" stroke="#333"/>
-  <polygon points="489,466 501,466 495,474" fill="#333"/>
+  <line x1="195" y1="434" x2="195" y2="474" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="345" y1="434" x2="345" y2="474" stroke="#333" marker-end="url(#arrow)"/>
+  <line x1="495" y1="434" x2="495" y2="474" stroke="#333" marker-end="url(#arrow)"/>
 
   <!-- 明文行 -->
   <rect x="140" y="480" width="110" height="36" rx="6" fill="#e8f0fe" stroke="#333"/>
@@ -112,20 +104,18 @@
   <!-- IV -> 第一个异或（黑线） -->
   <rect x="20" y="402" width="70" height="36" rx="6" fill="#f3e5f5" stroke="#333"/>
   <text x="55" y="425" text-anchor="middle">IV</text>
-  <line x1="90" y1="420" x2="181" y2="420" stroke="#333"/>
+  <line x1="90" y1="420" x2="181" y2="420" stroke="#333" marker-end="url(#arrow)"/>
   <text x="120" y="414" font-size="12" fill="#c62828">enc</text>
 
   <!-- C1 右侧引出 -> 第二个异或（黑线） -->
   <line x1="250" y1="348" x2="270" y2="348" stroke="#333"/>
   <line x1="270" y1="348" x2="270" y2="420" stroke="#333"/>
-  <line x1="270" y1="420" x2="331" y2="420" stroke="#333"/>
-  <polygon points="331,414 331,426 339,420" fill="#333"/>
+  <line x1="270" y1="420" x2="331" y2="420" stroke="#333" marker-end="url(#arrow)"/>
   <text x="278" y="412" font-size="12" fill="#c62828">enc</text>
 
   <!-- C2 右侧引出 -> 第三个异或（黑线） -->
   <line x1="400" y1="348" x2="420" y2="348" stroke="#333"/>
   <line x1="420" y1="348" x2="420" y2="420" stroke="#333"/>
-  <line x1="420" y1="420" x2="481" y2="420" stroke="#333"/>
-  <polygon points="481,414 481,426 489,420" fill="#333"/>
+  <line x1="420" y1="420" x2="481" y2="420" stroke="#333" marker-end="url(#arrow)"/>
   <text x="428" y="412" font-size="12" fill="#c62828">enc</text>
 </svg>
