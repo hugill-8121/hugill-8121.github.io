@@ -1,4 +1,5 @@
-import { Octokit } from "https://esm.sh/octokit";
+// 固定版本并使用 bundle 构建：不跟随 CDN 上的“最新版”及其依赖漂移，避免线上行为被悄悄改变
+import { Octokit } from "https://esm.sh/octokit@5.0.5/es2022/octokit.bundle.mjs";
 import { decodeBase64Utf8 } from "./blog-config.js";
 
 /**
@@ -12,6 +13,23 @@ export function encodeRepoPath(path) {
         .filter(segment => segment !== '')
         .map(segment => encodeURIComponent(segment))
         .join('/');
+}
+
+/**
+ * 读取仓库文件（contents 接口）。
+ * 不走 octokit.rest.repos.getContent：Octokit 会把 {path} 模板参数里的 "/" 编码成 %2F，
+ * 而 GitHub 的 contents / git/refs 路由现在对 %2F 返回 404 / Reference does not exist，
+ * 所以这里把路径直接拼进路由，只对每一段做编码。
+ * @param {Octokit} octokit
+ * @param {{owner:string, repo:string, branch:string}} repoInfo
+ * @param {string} path
+ */
+async function getRepoContent(octokit, repoInfo, path) {
+    const { data } = await octokit.request(
+        `GET /repos/{owner}/{repo}/contents/${encodeRepoPath(path)}`,
+        { owner: repoInfo.owner, repo: repoInfo.repo, ref: repoInfo.branch }
+    );
+    return data;
 }
 
 /**
@@ -209,12 +227,7 @@ async function getRateLimit(token) {
  */
 async function fetchBlogConfig(octokit, repoInfo) {
     const path = repoInfo.path || 'blog-config.json';
-    const { data } = await octokit.rest.repos.getContent({
-        owner: repoInfo.owner,
-        repo: repoInfo.repo,
-        path,
-        ref: repoInfo.branch
-    });
+    const data = await getRepoContent(octokit, repoInfo, path);
 
     if (Array.isArray(data) || !data || typeof data.content !== 'string') {
         throw new Error(`${path} 不是一个可读取的文件`);
@@ -318,12 +331,7 @@ class CommitBatch {
      * @returns {Promise<CommitBatch>}
      */
     async rename(fromPath, toPath) {
-        const { data } = await this.octokit.rest.repos.getContent({
-            owner: this.owner,
-            repo: this.repo,
-            path: fromPath,
-            ref: this.branch
-        });
+        const data = await getRepoContent(this.octokit, this, fromPath);
         if (Array.isArray(data) || !data || typeof data.content !== 'string') {
             throw new Error(`无法重命名：${fromPath} 不是文件`);
         }
@@ -392,12 +400,12 @@ class CommitBatch {
                 });
 
                 // 4. 更新分支引用
-                await this.octokit.rest.git.updateRef({
-                    owner: this.owner,
-                    repo: this.repo,
-                    ref: `heads/${this.branch}`,
-                    sha: newCommit.sha
-                });
+                //    分支名直接拼进路由：octokit.rest.git.updateRef 会把 ref 里的 "/" 编码成 %2F，
+                //    GitHub 会返回 422 “Reference does not exist”（提交资源/保存文章因此失败）
+                await this.octokit.request(
+                    `PATCH /repos/{owner}/{repo}/git/refs/heads/${encodeRepoPath(this.branch)}`,
+                    { owner: this.owner, repo: this.repo, sha: newCommit.sha }
+                );
 
                 this.operations.clear();
                 return { success: true, commitSha: newCommit.sha };
