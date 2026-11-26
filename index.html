@@ -339,6 +339,7 @@
             getRateLimit,
             batchGetFileCommits,
             fetchBlogConfig,
+            fetchRepoFileText,
             listRepoPaths,
             CommitBatch,
             deleteRepoFiles,
@@ -2227,7 +2228,11 @@
                 await initBlog();
 
                 const params = getUrlParams();
-                if (params.opera === 'blog-show' && (params.blog || params.uuid)) {
+                if (params.opera === 'blog-show' && params.fresh === '1' && params.path) {
+                    // 刚保存的文章会在新标签页以 fresh=1 打开：Pages 重新构建有延迟，
+                    // 这里用 URL 里的元信息 + GitHub API 读最新正文，不依赖静态文件
+                    await showFreshBlogFromUrl();
+                } else if (params.opera === 'blog-show' && (params.blog || params.uuid)) {
                     // 如果URL参数指定了博客，进入博客详情页
                     await showBlogByIdentity({ title: params.blog, uuid: params.uuid });
                 }
@@ -2254,6 +2259,53 @@
             currentBlog = blogInfo;
             switchToShow(blogInfo, dom);
             loadBlogContent(blogInfo, dom, renderMarkdown, { content: blogContentCache.get(blogInfo.path) });
+            loadCommitInfo(blogInfo);
+        }
+
+        // 构造文章详情链接：fresh=1 表示详情页用 GitHub API 读最新正文（绕过 Pages 构建延迟）
+        function buildBlogShowUrl({ uuid, path, title, tags, fresh = false }) {
+            const query = new URLSearchParams();
+            query.set('opera', 'blog-show');
+            query.set('uuid', uuid == null ? '' : String(uuid));
+            if (path) query.set('path', path);
+            if (title) query.set('title', title);
+            if (Array.isArray(tags) && tags.length) query.set('tags', JSON.stringify(tags));
+            if (fresh) query.set('fresh', '1');
+            return `${window.location.pathname}?${query.toString()}`;
+        }
+
+        // 刚保存的文章：信息全部来自 URL，正文走 API，避免新标签页读到 Pages 上的旧版本
+        async function showFreshBlogFromUrl() {
+            const search = new URLSearchParams(window.location.search);
+            const path = search.get('path') || '';
+            const uuid = search.get('uuid') || '';
+            const title = search.get('title') || '';
+            let tags = [];
+            try {
+                tags = JSON.parse(search.get('tags') || '[]');
+            } catch (err) {
+                tags = (search.get('tags') || '').split(',').filter(Boolean);
+            }
+            if (!Array.isArray(tags)) tags = [];
+
+            let blogInfo = allBlogs.find(b => (uuid && String(b.uuid) === String(uuid)) || b.path === path);
+            if (!blogInfo) {
+                blogInfo = { blog_uuid: uuid, uuid, path, filePath: path, tags, description: title };
+                allBlogs.push(blogInfo);
+            }
+            Object.assign(blogInfo, { blog_uuid: uuid || blogInfo.blog_uuid, uuid: uuid || blogInfo.uuid, path, filePath: path, title, tags });
+
+            currentBlog = blogInfo;
+            switchToShow(blogInfo, dom);
+
+            try {
+                const repoInfo = { owner: config.owner, repo: config.repo, branch: config.branch };
+                const text = await fetchRepoFileText(createOctokit(getGithubToken()), repoInfo, path);
+                loadBlogContent(blogInfo, dom, renderMarkdown, { content: text });
+            } catch (err) {
+                console.warn('读取最新正文失败，回退静态文件:', err);
+                loadBlogContent(blogInfo, dom, renderMarkdown);
+            }
             loadCommitInfo(blogInfo);
         }
 
@@ -3093,6 +3145,20 @@
 
                 dom.saveEdit.disabled = true;
 
+                // 保存过程有多轮网络等待，等成功了再 window.open 会因“用户激活”过期被浏览器拦截，
+                // 所以先同步开一个空白标签页占位，提交成功后再把地址换成文章详情
+                const showWindow = window.open('', '_blank');
+                if (showWindow) {
+                    try {
+                        showWindow.document.write('<!doctype html><title>正在保存…</title>'
+                            + '<body style="font-family:system-ui,sans-serif;padding:24px;color:#444">'
+                            + '正在提交文章，保存完成后这里会显示最新内容…</body>');
+                        showWindow.document.close();
+                    } catch (err) {
+                        console.warn('占位标签页初始化失败:', err);
+                    }
+                }
+
                 try {
                     showEditStatus('保存中...');
                     const octokit = createOctokit(token);
@@ -3181,12 +3247,9 @@
                     updatePendingResourceBadge();
 
                     renderTabs();
-                    showEditStatus(resourceCount > 0
-                        ? `保存成功，同时提交了 ${resourceCount} 个资源文件`
-                        : '保存成功！');
 
-                    // 5. 用已提交的内容直接刷新界面：不再重新拉 blog-config.json / md，
-                    //    否则 GitHub Pages 的 CDN 缓存会让页面停在旧内容上。
+                    // 5. 只刷新编辑器本地状态，不再跳到详情页（详情在新标签页打开）；
+                    //    blog-config.json / md 不重新拉，避免 GitHub Pages 缓存把界面停在旧内容上。
                     const blogObj = allBlogs.find(b => String(b.blog_uuid) === String(uuid) || b.path === filePath);
                     const mergedBlog = blogObj || {};
                     Object.assign(mergedBlog, {
@@ -3250,20 +3313,34 @@
                     renderMonthList();
                     renderBlogs();
 
-                    // 直接展示编辑器里的最新内容，不经过静态站点缓存
-                    switchToShow(mergedBlog, dom);
-                    window.history.pushState({}, '', `${window.location.pathname}?opera=blog-show&uuid=${encodeURIComponent(uuid)}`);
-                    loadBlogContent(mergedBlog, dom, renderMarkdown, { content });
-                    displayCommitInfo({
-                        author: mergedBlog.committer,
-                        date: mergedBlog.lastModified,
-                        message: mergedBlog.commitMessage,
-                        sha: String(commitResult.commitSha || '').substring(0, 7)
-                    }, config.owner, config.repo, commitResult.commitSha);
+                    // 详情放到浏览器新标签页打开，编辑页保持原样：
+                    // 传 fresh=1，新标签页直接用 GitHub API 读刚提交的正文，不受 Pages 构建延迟影响
+                    const showUrl = buildBlogShowUrl({
+                        uuid,
+                        path: filePath,
+                        title,
+                        tags: tags.slice(),
+                        fresh: true
+                    });
+                    if (showWindow && !showWindow.closed) {
+                        showWindow.location.replace(showUrl);
+                        showEditStatus(resourceCount > 0
+                            ? `保存成功，已在新标签页打开文章（同时提交了 ${resourceCount} 个资源文件）`
+                            : '保存成功，已在新标签页打开文章');
+                    } else {
+                        showEditStatus('保存成功，但新标签页被浏览器拦截；可点开文章列表里的这篇文章查看最新内容');
+                    }
                     renderFileTree();
                     renderResourceTreeFromCache();
                 } catch (error) {
                     console.error('保存失败:', error);
+                    if (showWindow && !showWindow.closed) {
+                        try {
+                            showWindow.close();
+                        } catch (err) {
+                            console.warn('关闭占位标签页失败:', err);
+                        }
+                    }
                     showEditStatus(`保存失败: ${error.message}`, true);
                 } finally {
                     dom.saveEdit.disabled = false;

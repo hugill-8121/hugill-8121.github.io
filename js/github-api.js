@@ -255,6 +255,26 @@ async function fetchBlogConfig(octokit, repoInfo) {
 }
 
 /**
+ * 读取仓库中任意文本文件（如文章 md），返回 UTF-8 文本
+ * 用于刚提交后打开详情页：GitHub Pages 重新构建有延迟，静态文件可能还是旧版本
+ * @param {Octokit} octokit
+ * @param {{owner:string, repo:string, branch:string}} repoInfo
+ * @param {string} path 仓库内路径
+ * @returns {Promise<string>}
+ */
+async function fetchRepoFileText(octokit, repoInfo, path) {
+    const data = await getRepoContent(octokit, repoInfo, path);
+
+    if (Array.isArray(data) || !data || typeof data.content !== 'string') {
+        throw new Error(`${path} 不是一个可读取的文件`);
+    }
+    if (data.encoding && data.encoding !== 'base64') {
+        throw new Error(`${path} 内容过大，请从静态站点查看`);
+    }
+    return decodeBase64Utf8(data.content);
+}
+
+/**
  * 列出仓库某个目录下的全部路径（一次递归取树，避免逐层请求打满限流）
  * @param {Octokit} octokit
  * @param {{owner:string, repo:string, branch:string}} repoInfo
@@ -491,6 +511,7 @@ export {
     getRateLimit,
     batchGetFileCommits,
     fetchBlogConfig,
+    fetchRepoFileText,
     listRepoPaths,
     CommitBatch,
     commitFiles,
