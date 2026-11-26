@@ -2206,14 +2206,11 @@
         // ==================== 结束编辑界面相关函数 ====================
 
         // 解析URL参数
+        // 用 URLSearchParams 解析：文件名里带 = 号（或 + 号）时不会被截断
         function getUrlParams() {
             const params = {};
-            const queryString = window.location.search.slice(1);
-            queryString.split('&').forEach(pair => {
-                const [key, value] = pair.split('=');
-                if (key && value) {
-                    params[key] = decodeURIComponent(value);
-                }
+            new URLSearchParams(window.location.search).forEach((value, key) => {
+                if (key) params[key] = value;
             });
             return params;
         }
