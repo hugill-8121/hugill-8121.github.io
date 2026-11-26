@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>加载中...</title>
     <!-- 标签页图标：未登录为默认文档图标，登录后换成当前 GitHub 用户头像（由脚本设置） -->
-    <link rel="icon" id="page-favicon" type="image/svg+xml" href="favicon.svg">
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="icon" id="page-favicon" type="image/svg+xml" href="assets/images/favicon.svg">
+    <link rel="stylesheet" href="assets/css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css">
 </head>
@@ -86,19 +86,19 @@
         </div>
     </div>
 
-    <!-- 上传资源：先选择 asserts 下的目标文件夹 -->
+    <!-- 上传资源：先选择资源目录下的目标文件夹 -->
     <div class="api-status-modal" id="resource-upload-modal">
         <div class="modal-content resource-upload-modal-content">
             <h3 class="modal-title"><i class="fa fa-upload"></i> 上传资源</h3>
             <div class="form-group">
-                <label for="resource-upload-folder">上传到 asserts 下的文件夹</label>
+                <label for="resource-upload-folder">上传到资源目录下的文件夹</label>
                 <div class="group-row">
                     <select id="resource-upload-folder" class="modal-input"></select>
                     <button type="button" class="group-add-btn" id="resource-upload-new-folder" title="在目标文件夹下新建子文件夹">
                         <i class="fa fa-folder-plus"></i> 新建
                     </button>
                 </div>
-                <p class="resource-upload-hint" id="resource-upload-hint">目标：asserts（根目录）</p>
+                <p class="resource-upload-hint" id="resource-upload-hint">目标：assets/images（根目录）</p>
             </div>
             <div class="modal-actions">
                 <button type="button" class="btn-cancel" id="resource-upload-cancel">取消</button>
@@ -299,7 +299,7 @@
                 <div class="edit-sidebar-right">
                     <div class="sidebar-header">
                         <h3><i class="fa fa-folder-o"></i> 资源</h3>
-                        <button type="button" class="sidebar-action" id="resource-new-folder-btn" title="在 asserts 目录下新建文件夹">
+                        <button type="button" class="sidebar-action" id="resource-new-folder-btn" title="在资源目录下新建文件夹">
                             <i class="fa fa-folder-plus"></i> 新建
                         </button>
                     </div>
@@ -308,7 +308,7 @@
                         <button id="resource-search-clear" class="resource-search-clear" style="display: none;">×</button>
                     </div>
                     <div class="resource-toolbar">
-                        <button type="button" id="resource-upload-btn" class="resource-tool-btn" title="先选择 asserts 下的目标文件夹，再选择文件">
+                        <button type="button" id="resource-upload-btn" class="resource-tool-btn" title="先选择资源目录下的目标文件夹，再选择文件">
                             <i class="fa fa-upload"></i> 上传
                         </button>
                     </div>
@@ -320,7 +320,7 @@
                     <div class="resource-tree" id="resource-tree">
                         <!-- 资源树将动态生成 -->
                     </div>
-                    <div class="resource-drag-hint">拖动文件到文件夹上可移动位置；拖到资源树空白处移到 <code>asserts</code> 根目录</div>
+                    <div class="resource-drag-hint">拖动文件到文件夹上可移动位置；拖到资源树空白处移到 <code>assets/images</code> 根目录</div>
                 </div>
             </div>
         </div>
@@ -358,14 +358,14 @@
             CommitBatch,
             sanitizeToken,
             isAuthError
-        } from './js/github-api.js';
+        } from './assets/js/github-api.js';
         import {
             findBlogEntry,
             upsertBlogEntry,
             serializeBlogConfig,
             makeUuid
-        } from './js/blog-config.js';
-        import { renderMarkdown, switchToShow, loadBlogContent, escapeHtml } from './js/blog-utils.js';
+        } from './assets/js/blog-config.js';
+        import { renderMarkdown, switchToShow, loadBlogContent, escapeHtml } from './assets/js/blog-utils.js';
 
         // 全局变量
         let allBlogs = [];
@@ -859,7 +859,7 @@
         // ==================== 标签页图标（favicon） ====================
         // 默认图标用仓库里的 favicon.svg（head 里也作为静态默认值）；
         // blog-config.json 的 web_icon 配置后覆盖默认图标；登录后换成用户头像，登出回到站点图标
-        const DEFAULT_FAVICON = 'favicon.svg';
+        const DEFAULT_FAVICON = 'assets/images/favicon.svg';
         // 站点图标：初始为默认图标，loadBlogSettings 读取 web_icon 后更新
         let siteFavicon = DEFAULT_FAVICON;
 
@@ -1343,9 +1343,9 @@
             }
         }
 
-        // ==================== 资源栏（asserts 目录） ====================
+        // ==================== 资源栏（assets/images 目录） ====================
 
-        const RESOURCE_ROOT = 'asserts';
+        const RESOURCE_ROOT = 'assets/images';
         let resourceTreeLoaded = false;
         let resourceRemotePaths = []; // [{ path, type }]，一次递归取树后的缓存
         let blogFolderPaths = [];     // blog 目录下已有的子文件夹（来自同一次取树）
@@ -1572,7 +1572,7 @@
             return items;
         }
 
-        // 从仓库树缓存里取出 asserts 目录下的路径（公开仓库匿名也能读）
+        // 从仓库树缓存里取出资源目录下的路径（公开仓库匿名也能读）
         async function loadResourcePaths(force = false) {
             const items = await loadRepoTreeOnce(force);
             return items
@@ -1685,7 +1685,7 @@
             return false;
         }
 
-        // 目标目录必须是 asserts 本身或它的子目录；移动到原目录视为无效
+        // 目标目录必须是资源目录本身或它的子目录；移动到原目录视为无效
         function isResourceMoveTargetAllowed(fromPath, targetFolder) {
             if (!fromPath) return false;
             const folder = targetFolder || RESOURCE_ROOT;
@@ -1748,7 +1748,7 @@
             const targetFolder = String(targetFolderPath || RESOURCE_ROOT).replace(/\/+$/, '') || RESOURCE_ROOT;
             if (!fromPath) return;
             if (targetFolder !== RESOURCE_ROOT && !targetFolder.startsWith(RESOURCE_ROOT + '/')) {
-                showToast('只能移动到 asserts 目录内', true);
+                showToast('只能移动到资源目录内', true);
                 return;
             }
             const currentPath = resourceVirtualPath(fromPath);
@@ -1775,7 +1775,7 @@
                 return;
             }
             if (targetFolder !== RESOURCE_ROOT && !targetFolder.startsWith(RESOURCE_ROOT + '/')) {
-                showToast('只能修改为 asserts 目录内的路径', true);
+                showToast('只能修改为资源目录内的路径', true);
                 return;
             }
             if (isResourcePathTaken(targetPath, originalPath)) {
@@ -3794,7 +3794,7 @@
                 await commitPendingVisibility();
             });
 
-            // 拖到资源树的空白处 = 移动到 asserts 根目录（具体项由各自的 dragover/drop 处理）
+            // 拖到资源树的空白处 = 移动到资源根目录（具体项由各自的 dragover/drop 处理）
             dom.resourceTree.addEventListener('dragover', (e) => {
                 if (!resourceDragState) return;
                 if (e.target.closest('.tree-item')) return;
