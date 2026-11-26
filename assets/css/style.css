@@ -1063,6 +1063,34 @@ h1 {
     accent-color: #4f46e5;
 }
 
+/* 文件栏：勾选列固定在最外侧，图标与文件名按层级缩进 */
+.file-tree .tree-item {
+    display: grid;
+    grid-template-columns: 1.1rem 1fr;
+    column-gap: 0.4rem;
+    padding-left: 0.6rem;
+    padding-right: 0.6rem;
+}
+
+.tree-check-slot {
+    width: 1.1rem;
+}
+
+.tree-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.tree-label > i {
+    flex: none;
+}
+
+.file-tree .tree-hidden-check {
+    justify-self: center;
+}
+
 .tree-item.file.is-hidden {
     color: #9ca3af;
 }
@@ -1168,6 +1196,10 @@ h1 {
 
 .tree-item.file {
     padding-left: 1.4rem;
+}
+
+.file-tree .tree-item.file {
+    padding-left: 0.6rem;
 }
 
 .tree-item.file i {

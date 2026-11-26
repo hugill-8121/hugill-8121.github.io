@@ -1109,8 +1109,7 @@
                     folderEl.dataset.path = subPath;
                     folderEl.dataset.parentPath = folderPath || '';
                     folderEl.dataset.folderPath = subPath;
-                    folderEl.innerHTML = `<i class="fa ${expanded ? 'fa-folder-open-o' : 'fa-folder-o'}"></i> <span class="folder-name">${escapeHtml(folderName)}</span>`;
-                    folderEl.style.paddingLeft = `${level * 16 + 12}px`;
+                    folderEl.innerHTML = `<span class="tree-check-slot"></span><span class="tree-label" style="padding-left:${level * 16}px"><i class="fa ${expanded ? 'fa-folder-open-o' : 'fa-folder-o'}"></i> <span class="folder-name">${escapeHtml(folderName)}</span></span>`;
 
                     // 单击展开/收起文件夹（子文件夹与文件一起处理）
                     folderEl.addEventListener('click', (e) => {
@@ -1150,7 +1149,6 @@
                     fileEl.dataset.path = fileInfo.path;
                     fileEl.dataset.title = fileInfo.blog.title;
                     fileEl.dataset.fileName = fileInfo.name;
-                    fileEl.style.paddingLeft = `${level * 16 + 28}px`;
 
                     // 显示状态：优先取待提交的批量变更，否则用当前配置
                     const pendingHidden = pendingVisibility.has(fileInfo.path)
@@ -1167,7 +1165,7 @@
                         }
                     }
 
-                    fileEl.innerHTML = `<input type="checkbox" class="tree-hidden-check" title="勾选=在主页隐藏" ${pendingHidden ? 'checked' : ''}><i class="fa fa-file-text-o"></i> ${escapeHtml(fileInfo.name)}`;
+                    fileEl.innerHTML = `<input type="checkbox" class="tree-hidden-check" title="勾选=在主页隐藏" ${pendingHidden ? 'checked' : ''}><span class="tree-label" style="padding-left:${level * 16}px"><i class="fa fa-file-text-o"></i> ${escapeHtml(fileInfo.name)}</span>`;
 
                     // 勾选只登记批量变更，不打开文章
                     const checkEl = fileEl.querySelector('.tree-hidden-check');
