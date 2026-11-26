@@ -223,6 +223,11 @@
                     <div class="file-tree" id="file-tree">
                         <!-- 文件树将动态生成 -->
                     </div>
+                    <div class="file-commit-bar">
+                        <button id="commit-visibility" class="file-commit-btn" disabled>
+                            <i class="fa fa-eye-slash"></i> 提交显示状态 (<span id="pending-visibility-count">0</span>)
+                        </button>
+                    </div>
                 </div>
 
                 <!-- 中间编辑区 -->
@@ -291,6 +296,9 @@
                 <div class="edit-sidebar-right">
                     <div class="sidebar-header">
                         <h3><i class="fa fa-folder-o"></i> 资源</h3>
+                        <button type="button" class="sidebar-action" id="resource-new-folder-btn" title="在 asserts 目录下新建文件夹">
+                            <i class="fa fa-folder-plus"></i> 新建文件夹
+                        </button>
                     </div>
                     <div class="resource-search">
                         <input type="text" id="resource-search-input" class="resource-search-input" placeholder="搜索资源...">
@@ -299,9 +307,6 @@
                     <div class="resource-toolbar">
                         <button type="button" id="resource-upload-btn" class="resource-tool-btn" title="先选择 asserts 下的目标文件夹，再选择文件">
                             <i class="fa fa-upload"></i> 上传
-                        </button>
-                        <button type="button" id="resource-new-folder-btn" class="resource-tool-btn">
-                            <i class="fa fa-folder-plus"></i> 新建文件夹
                         </button>
                     </div>
                     <div class="resource-commit-bar">
@@ -449,6 +454,9 @@
             editTabs: document.getElementById('edit-tabs'),
             fileTree: document.getElementById('file-tree'),
             newBlogFolderBtn: document.getElementById('new-blog-folder'),
+            // 文件栏显示状态批量提交
+            visibilityCommitBtn: document.getElementById('commit-visibility'),
+            pendingVisibilityCount: document.getElementById('pending-visibility-count'),
             resourceTree: document.getElementById('resource-tree'),
             resourceSearchInput: document.getElementById('resource-search-input'),
             resourceSearchClear: document.getElementById('resource-search-clear'),
@@ -546,6 +554,9 @@
         let pendingResourceFiles = new Map();
         // 待创建的资源文件夹（key: 仓库路径, value: { name }）
         let pendingResourceFolders = new Map();
+        // 文件栏批量显示状态变更（key: 文章仓库路径, value: 目标 hidden 布尔值）
+        // 勾选只登记到这里，点“提交显示状态”时一次性写回 blog-config.json
+        let pendingVisibility = new Map();
         let selectedTags = new Set(); // 标签云多选（与月份多选一致：命中任一选中标签即可）
         let globalCommitMap = new Map(); // 全局commit信息缓存 {path: commitInfo}
 
@@ -1132,6 +1143,12 @@
                     fileEl.dataset.fileName = fileInfo.name;
                     fileEl.style.paddingLeft = `${level * 16 + 28}px`;
 
+                    // 显示状态：优先取待提交的批量变更，否则用当前配置
+                    const pendingHidden = pendingVisibility.has(fileInfo.path)
+                        ? pendingVisibility.get(fileInfo.path)
+                        : !!fileInfo.blog.hidden;
+                    if (pendingHidden) fileEl.classList.add('is-hidden');
+
                     if (currentEditFile && currentEditFile.path === fileInfo.blog.path) {
                         fileEl.classList.add('active');
                         // 当前文章所在目录逐级展开，保证打开的文章在左侧栏能看到
@@ -1141,7 +1158,21 @@
                         }
                     }
 
-                    fileEl.innerHTML = `<i class="fa fa-file-text-o"></i> ${escapeHtml(fileInfo.name)}`;
+                    fileEl.innerHTML = `<input type="checkbox" class="tree-hidden-check" title="勾选=在主页隐藏" ${pendingHidden ? 'checked' : ''}><i class="fa fa-file-text-o"></i> ${escapeHtml(fileInfo.name)}`;
+
+                    // 勾选只登记批量变更，不打开文章
+                    const checkEl = fileEl.querySelector('.tree-hidden-check');
+                    checkEl.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                    });
+                    checkEl.addEventListener('change', () => {
+                        const current = !!fileInfo.blog.hidden;
+                        const desired = checkEl.checked;
+                        if (desired === current) pendingVisibility.delete(fileInfo.path);
+                        else pendingVisibility.set(fileInfo.path, desired);
+                        fileEl.classList.toggle('is-hidden', desired);
+                        updateVisibilityCommitBadge();
+                    });
 
                     // 单击打开文件
                     fileEl.addEventListener('click', () => {
@@ -1410,6 +1441,89 @@
             const count = pendingResourceCount();
             dom.pendingResourceCount.textContent = count;
             dom.resourceCommitBtn.disabled = count === 0;
+        }
+
+        function updateVisibilityCommitBadge() {
+            if (!dom.visibilityCommitBtn) return;
+            const count = pendingVisibility.size;
+            dom.pendingVisibilityCount.textContent = count;
+            dom.visibilityCommitBtn.disabled = count === 0;
+        }
+
+        // 批量提交文件栏勾选的显示状态变更，一次性写回 blog-config.json
+        async function commitPendingVisibility() {
+            if (pendingVisibility.size === 0) return { success: true };
+
+            const token = getGithubToken();
+            if (!token) {
+                alert('请先登录');
+                return { success: false, error: '未登录' };
+            }
+
+            const octokit = createOctokit(token);
+            const repoInfo = { owner: config.owner, repo: config.repo, branch: config.branch };
+            const pending = Array.from(pendingVisibility.entries());
+
+            dom.visibilityCommitBtn.disabled = true;
+            dom.visibilityCommitBtn.textContent = '提交中...';
+
+            try {
+                const remote = await fetchBlogConfig(octokit, repoInfo);
+
+                // 逐条按路径/uuid 定位配置条目，只改 hidden，保留其余字段
+                pending.forEach(([path, hidden]) => {
+                    const local = allBlogs.find(b => b.path === path);
+                    const uuid = local ? (local.blog_uuid ?? local.uuid) : undefined;
+                    // 先按路径定位（最稳），路径缺失时再按 uuid 兜底
+                    let found = findBlogEntry(remote.config, { path });
+                    if (!found && uuid) found = findBlogEntry(remote.config, { uuid });
+                    if (!found) throw new Error(`配置中找不到文章：${path}`);
+                    found.entry.hidden = !!hidden;
+                });
+
+                const configText = serializeBlogConfig(remote.config);
+                const batch = new CommitBatch({
+                    octokit,
+                    owner: config.owner,
+                    repo: config.repo,
+                    branch: config.branch
+                });
+                batch.add('blog-config.json', configText);
+
+                const result = await batch.commit(`更新文章显示状态: ${pending.length} 篇`);
+                if (!result.success) throw new Error(result.error);
+
+                // 同步本地状态
+                blogConfigData = remote.config;
+                pending.forEach(([path, hidden]) => {
+                    const blog = allBlogs.find(b => b.path === path);
+                    if (blog) blog.hidden = !!hidden;
+                    if (currentEditFile && currentEditFile.path === path) {
+                        currentEditFile.hidden = !!hidden;
+                        if (dom.editHidden) dom.editHidden.checked = !!hidden;
+                    }
+                });
+                pendingVisibility.clear();
+
+                allTags.clear();
+                allBlogs.forEach(b => { if (!b.hidden) (b.tags || []).forEach(t => allTags.add(t)); });
+
+                renderFileTree();
+                renderTags();
+                renderMonthList();
+                renderBlogs();
+                alert(`显示状态已提交（${pending.length} 篇）`);
+                return { success: true };
+            } catch (error) {
+                console.error('提交显示状态失败:', error);
+                alert(`提交显示状态失败: ${error.message || error}`);
+                return { success: false, error: error.message };
+            } finally {
+                dom.visibilityCommitBtn.innerHTML =
+                    `<i class="fa fa-eye-slash"></i> 提交显示状态 (<span id="pending-visibility-count">0</span>)`;
+                dom.pendingVisibilityCount = document.getElementById('pending-visibility-count');
+                updateVisibilityCommitBadge();
+            }
         }
 
         /**
@@ -3563,6 +3677,11 @@
             // 提交待上传的资源
             dom.resourceCommitBtn.addEventListener('click', async () => {
                 await commitPendingResources();
+            });
+
+            // 提交文件栏批量勾选的显示状态
+            dom.visibilityCommitBtn.addEventListener('click', async () => {
+                await commitPendingVisibility();
             });
 
             // 拖到资源树的空白处 = 移动到 asserts 根目录（具体项由各自的 dragover/drop 处理）
