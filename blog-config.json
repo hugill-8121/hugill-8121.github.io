@@ -61,6 +61,19 @@
           "C/C++"
         ]
       }
+    ],
+    "算法": [
+      {
+        "blog_uuid": "3c4f802f-aab4-48b0-8d2b-84e77253a5a1",
+        "title": "加密模式",
+        "description": "加密模式",
+        "path": "blog/算法/对称算法/加密模式.md",
+        "tags": [
+          "算法",
+          "加密模式"
+        ],
+        "hidden": false
+      }
     ]
   }
 }
