@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="博客">
+    <rect x="0" y="0" width="64" height="64" rx="14" fill="#2563eb"/>
+    <path d="M17 13h19.5L46 22.5V48a4 4 0 0 1-4 4H17a4 4 0 0 1-4-4V17a4 4 0 0 1 4-4z" fill="#ffffff"/>
+    <path d="M36.5 13v9.5H46z" fill="#bfdbfe"/>
+    <rect x="19" y="29" width="20" height="3.2" rx="1.6" fill="#93c5fd"/>
+    <rect x="19" y="36" width="20" height="3.2" rx="1.6" fill="#93c5fd"/>
+    <rect x="19" y="43" width="13" height="3.2" rx="1.6" fill="#93c5fd"/>
+</svg>

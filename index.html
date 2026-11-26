@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>加载中...</title>
+    <!-- 标签页图标：未登录为默认文档图标，登录后换成当前 GitHub 用户头像（由脚本设置） -->
+    <link rel="icon" id="page-favicon" type="image/svg+xml" href="favicon.svg">
     <link rel="stylesheet" href="css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css">
@@ -825,6 +827,43 @@
             return custom || defaultCommitMessage(isNew, title);
         }
 
+        // ==================== 标签页图标（favicon） ====================
+        // 默认图标用仓库里的 favicon.svg（head 里也作为静态默认值）；
+        // blog-config.json 的 web_icon 配置后覆盖默认图标；登录后换成用户头像，登出回到站点图标
+        const DEFAULT_FAVICON = 'favicon.svg';
+        // 站点图标：初始为默认图标，loadBlogSettings 读取 web_icon 后更新
+        let siteFavicon = DEFAULT_FAVICON;
+
+        /**
+         * 设置标签页图标。同一 <link> 上换 href：Chrome/Edge 会立即更新标签页图标。
+         * @param {string} href
+         */
+        function setPageFavicon(href) {
+            const link = document.getElementById('page-favicon');
+            if (!link) return;
+            const finalHref = href || siteFavicon;
+            if (link.href === finalHref) return;
+            link.type = /\.svg([?#]|$)/.test(finalHref) ? 'image/svg+xml' : 'image/png';
+            link.href = finalHref;
+        }
+
+        // 登录用户头像作为图标：先预加载确认可用，失败则回退站点图标
+        function setFaviconToAvatar(avatarUrl) {
+            const base = String(avatarUrl || '').trim();
+            if (!base) {
+                setPageFavicon(siteFavicon);
+                return;
+            }
+            // GitHub 头像支持 s=64 参数，请求小图避免拿 460px 大图做图标
+            const url = base + (base.includes('?') ? '&' : '?') + 's=64';
+            const probe = new Image();
+            probe.onload = () => setPageFavicon(url);
+            probe.onerror = () => setPageFavicon(siteFavicon);
+            probe.src = url;
+            // 立即先挂上，避免首次登录时要等预加载
+            setPageFavicon(url);
+        }
+
         // 把当前表单内容写回标签状态，并更新脏标记
         function snapshotActiveTab() {
             if (!activeTabId) return;
@@ -973,6 +1012,11 @@
             });
         }
 
+        // ==================== 左侧文件栏（blog 目录） ====================
+        // 记住已展开的文件夹（相对 blog/ 的路径）。重新渲染（打开/保存文章）时保持用户的展开状态，
+        // 否则每次渲染都会把整棵树折回去。
+        const expandedFileFolders = new Set();
+
         // 渲染文件树（支持多重文件夹结构）
         function renderFileTree() {
             dom.fileTree.innerHTML = '';
@@ -1027,45 +1071,31 @@
 
                 folders.forEach(folderName => {
                     const subPath = folderPath ? `${folderPath}/${folderName}` : folderName;
+                    const expanded = expandedFileFolders.has(subPath);
                     const folderEl = document.createElement('div');
-                    folderEl.className = 'tree-item folder';
+                    folderEl.className = 'tree-item folder' + (expanded ? ' expanded' : '');
+                    // 记录自身路径与父目录路径：收起父目录时，子文件夹也要跟着收起
+                    folderEl.dataset.path = subPath;
+                    folderEl.dataset.parentPath = folderPath || '';
                     folderEl.dataset.folderPath = subPath;
-                    folderEl.innerHTML = `<i class="fa fa-folder-o"></i> <span class="folder-name">${escapeHtml(folderName)}</span>`;
+                    folderEl.innerHTML = `<i class="fa ${expanded ? 'fa-folder-open-o' : 'fa-folder-o'}"></i> <span class="folder-name">${escapeHtml(folderName)}</span>`;
                     folderEl.style.paddingLeft = `${level * 16 + 12}px`;
 
-                    // 单击展开/收起文件夹
+                    // 单击展开/收起文件夹（子文件夹与文件一起处理）
                     folderEl.addEventListener('click', (e) => {
                         e.stopPropagation();
                         const icon = folderEl.querySelector('i');
-                        const isExpanded = folderEl.classList.contains('expanded');
 
-                        if (isExpanded) {
+                        if (expandedFileFolders.has(subPath)) {
+                            expandedFileFolders.delete(subPath);
                             folderEl.classList.remove('expanded');
                             icon.className = 'fa fa-folder-o';
-                            // 收起子项
-                            let next = folderEl.nextElementSibling;
-                            while (next && next.classList.contains('tree-item')) {
-                                if (next.dataset.parentPath === subPath) {
-                                    next.style.display = 'none';
-                                } else {
-                                    break;
-                                }
-                                next = next.nextElementSibling;
-                            }
                         } else {
+                            expandedFileFolders.add(subPath);
                             folderEl.classList.add('expanded');
                             icon.className = 'fa fa-folder-open-o';
-                            // 展开子项
-                            let next = folderEl.nextElementSibling;
-                            while (next && next.classList.contains('tree-item')) {
-                                if (next.dataset.parentPath === subPath) {
-                                    next.style.display = 'flex';
-                                } else {
-                                    break;
-                                }
-                                next = next.nextElementSibling;
-                            }
                         }
+                        syncFileTreeVisibility();
                     });
 
                     // 右键菜单
@@ -1089,11 +1119,15 @@
                     fileEl.dataset.path = fileInfo.path;
                     fileEl.dataset.title = fileInfo.blog.title;
                     fileEl.dataset.fileName = fileInfo.name;
-                    fileEl.style.display = 'none'; // 默认收起
                     fileEl.style.paddingLeft = `${level * 16 + 28}px`;
 
                     if (currentEditFile && currentEditFile.path === fileInfo.blog.path) {
                         fileEl.classList.add('active');
+                        // 当前文章所在目录逐级展开，保证打开的文章在左侧栏能看到
+                        const parts = folderPath.split('/').filter(Boolean);
+                        for (let i = 1; i <= parts.length; i++) {
+                            expandedFileFolders.add(parts.slice(0, i).join('/'));
+                        }
                     }
 
                     fileEl.innerHTML = `<i class="fa fa-file-text-o"></i> ${escapeHtml(fileInfo.name)}`;
@@ -1115,6 +1149,24 @@
 
             // 开始渲染
             renderFolderLevel(fileTree, '');
+            syncFileTreeVisibility();
+        }
+
+        // 依据已展开的文件夹统一计算可见性：父目录收起时，其下所有子文件夹与文件一起隐藏
+        function syncFileTreeVisibility() {
+            Array.from(dom.fileTree.querySelectorAll('.tree-item')).forEach(el => {
+                let parent = el.dataset.parentPath || '';
+                let hidden = false;
+                while (parent) {
+                    if (!expandedFileFolders.has(parent)) {
+                        hidden = true;
+                        break;
+                    }
+                    const index = parent.lastIndexOf('/');
+                    parent = index > -1 ? parent.substring(0, index) : '';
+                }
+                el.style.display = hidden ? 'none' : 'flex';
+            });
         }
 
         // 显示文件文件夹右键菜单
@@ -1215,6 +1267,11 @@
                     for (let i = 2; i <= folderParts.length; i++) {
                         addItem(folderParts.slice(0, i).join('/'), 'folder');
                     }
+                }
+                // 新建后逐级展开父目录，让新文件夹直接可见
+                const nameParts = name.split('/').filter(Boolean);
+                for (let i = 1; i <= nameParts.length; i++) {
+                    expandedFileFolders.add(nameParts.slice(0, i).join('/'));
                 }
                 renderFileTree();
 
@@ -2162,6 +2219,8 @@
 
         // 初始化
         document.addEventListener('DOMContentLoaded', async () => {
+            // 先挂上站点图标，配置加载后按 web_icon 更新，登录校验成功后再换成用户头像
+            setPageFavicon(siteFavicon);
             try {
                 await loadBlogSettings();
                 await checkLoginStatus();
@@ -2271,6 +2330,12 @@
                 // 设置介绍
                 if (config.web_introduction) {
                     document.getElementById('blog-intro').textContent = config.web_introduction;
+                }
+
+                // 设置站点标签页图标（web_icon 为相对仓库根的图标路径）
+                if (config.web_icon && String(config.web_icon).trim()) {
+                    siteFavicon = String(config.web_icon).trim();
+                    setPageFavicon(siteFavicon);
                 }
             } catch (err) {
                 console.warn('加载博客配置失败，使用默认值:', err);
@@ -2849,6 +2914,8 @@
                 dom.avatarImg.src = user.avatar_url;
                 dom.avatarImg.style.display = 'block';
                 dom.defaultAvatar.style.display = 'none';
+                // 标签页图标换成登录用户的头像
+                setFaviconToAvatar(user.avatar_url);
             }
         }
 
@@ -2863,6 +2930,8 @@
             dom.avatarImg.src = '';
             dom.avatarImg.style.display = 'none';
             dom.defaultAvatar.style.display = 'block';
+            // 退出登录后标签页图标回到站点图标
+            setPageFavicon(siteFavicon);
         }
 
         // 更新登录状态
