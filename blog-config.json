@@ -5,7 +5,7 @@
   "web_icon": "assets/images/favicon.svg",
   "profile": {
     "name": "云风青",
-    "avatar": "assets/images/favicon.svg",
+    "avatar": "assets/images/avatar.png",
     "bio": "后端 / 底层开发，写 C/C++、密码学与数据库迁移的那些事，顺手记点踩坑笔记。",
     "links": [
       {

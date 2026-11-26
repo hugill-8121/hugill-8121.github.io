@@ -1874,6 +1874,8 @@ h1 {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    /* 浅色头像在白底上会糊掉，用内描边 + 轻投影把圆形边界勾出来 */
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.10), 0 2px 8px rgba(15, 23, 42, 0.10);
 }
 
 .footer-avatar-img {
