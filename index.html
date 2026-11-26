@@ -304,6 +304,7 @@
                     <div class="resource-tree" id="resource-tree">
                         <!-- 资源树将动态生成 -->
                     </div>
+                    <div class="resource-drag-hint">拖动文件到文件夹上可移动位置；拖到资源树空白处移到 <code>asserts</code> 根目录</div>
                 </div>
             </div>
         </div>
@@ -1423,7 +1424,7 @@
                         node = ensureFolder(node, parts[i], parts.slice(0, i + 1).join('/'));
                     }
                 } else {
-                    addFile(item.path, { pending: false });
+                    addFile(item.path, { pending: false, sha: item.sha || '' });
                 }
             });
 
@@ -1443,6 +1444,169 @@
             });
 
             return root;
+        }
+
+        // ==================== 资源文件拖拽移动 ====================
+        // 拖动资源树里的文件到另一个文件夹，即可修改它的归属路径。
+        // 待提交的文件只改队列里的路径；已在仓库里的文件会立刻提交一次“移动”（引用原 blob，不重传内容）。
+        let resourceDragState = null; // { path, pending }
+
+        function resourceParentOf(path) {
+            const index = String(path || '').lastIndexOf('/');
+            return index > -1 ? path.substring(0, index) : '';
+        }
+
+        // 目标目录必须是 asserts 本身或它的子目录；移动到原目录视为无效
+        function isResourceMoveTargetAllowed(fromPath, targetFolder) {
+            if (!fromPath) return false;
+            const folder = targetFolder || RESOURCE_ROOT;
+            if (folder !== RESOURCE_ROOT && !folder.startsWith(RESOURCE_ROOT + '/')) return false;
+            return `${folder}/${fromPath.split('/').pop()}` !== fromPath;
+        }
+
+        function clearResourceDragHover() {
+            dom.resourceTree.querySelectorAll('.drop-hover, .dragging').forEach(el => {
+                el.classList.remove('drop-hover', 'dragging');
+            });
+            dom.resourceTree.classList.remove('drop-hover');
+        }
+
+        function startResourceDrag(e, file, el) {
+            resourceDragState = { path: file.path, pending: !!file.pending, name: file.name };
+            el.classList.add('dragging');
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                // 用自定义 MIME，避免拖到编辑器里时被当成文本粘贴
+                e.dataTransfer.setData('application/x-blog-resource', file.path);
+                e.dataTransfer.setData('text/plain', file.path);
+            }
+        }
+
+        function endResourceDrag() {
+            resourceDragState = null;
+            clearResourceDragHover();
+        }
+
+        function handleResourceFolderDragOver(e, el, folderPath) {
+            if (!resourceDragState) return;
+            if (!isResourceMoveTargetAllowed(resourceDragState.path, folderPath)) {
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'not-allowed';
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+            el.classList.add('drop-hover');
+        }
+
+        function handleResourceFolderDragLeave(e, el) {
+            if (el.contains(e.relatedTarget)) return;
+            el.classList.remove('drop-hover');
+        }
+
+        function handleResourceFolderDrop(e, el, folderPath) {
+            if (!resourceDragState) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const state = resourceDragState;
+            endResourceDrag();
+            moveResourceFile(state.path, folderPath);
+        }
+
+        // 移动资源文件（拖拽和将来的右键菜单共用）
+        async function moveResourceFile(fromPath, targetFolderPath) {
+            const targetFolder = String(targetFolderPath || RESOURCE_ROOT).replace(/\/+$/, '') || RESOURCE_ROOT;
+            const name = String(fromPath || '').split('/').pop();
+            const targetPath = `${targetFolder}/${name}`;
+
+            if (!fromPath || !name) return;
+            if (targetPath === fromPath) {
+                showToast('文件已在该目录下');
+                return;
+            }
+            if (targetFolder !== RESOURCE_ROOT && !targetFolder.startsWith(RESOURCE_ROOT + '/')) {
+                showToast('只能移动到 asserts 目录内', true);
+                return;
+            }
+
+            const conflictRemote = resourceRemotePaths.some(item => item.type === 'file' && item.path === targetPath);
+            const conflictPending = pendingResourceFiles.has(targetPath);
+            if (conflictRemote || conflictPending) {
+                showToast(`目标目录已存在同名文件：${targetPath}，请先重命名或删除`, true);
+                return;
+            }
+
+            // 待提交的文件：只调整队列，不产生提交
+            if (pendingResourceFiles.has(fromPath)) {
+                const meta = pendingResourceFiles.get(fromPath) || {};
+                pendingResourceFiles.delete(fromPath);
+                pendingResourceFiles.set(targetPath, Object.assign({}, meta, { name, folderPath: targetFolder }));
+                renderResourceTreeFromCache();
+                showToast(`已移动到 ${targetFolder}（待提交）`);
+                return;
+            }
+
+            const token = getGithubToken();
+            if (!token) {
+                alert('请先登录后再移动资源文件');
+                return;
+            }
+
+            const fileMeta = resourceRemotePaths.find(item => item.type === 'file' && item.path === fromPath);
+            if (!fileMeta) {
+                showToast(`找不到资源文件：${fromPath}`, true);
+                return;
+            }
+
+            const octokit = createOctokit(token);
+            const batch = new CommitBatch({
+                octokit,
+                owner: config.owner,
+                repo: config.repo,
+                branch: config.branch
+            });
+
+            try {
+                if (fileMeta.sha) {
+                    batch.moveRef(fromPath, targetPath, fileMeta.sha);
+                } else {
+                    // 老缓存里可能没有 sha，退回“读内容再写入”的方式
+                    await batch.rename(fromPath, targetPath);
+                }
+                const result = await batch.commit(`移动资源文件: ${name} -> ${targetFolder}`);
+                if (!result.success) throw new Error(result.error);
+
+                resourceRemotePaths = resourceRemotePaths.filter(item => item.path !== fromPath);
+                resourceRemotePaths.push({
+                    path: targetPath,
+                    type: 'file',
+                    size: fileMeta.size || 0,
+                    sha: fileMeta.sha || ''
+                });
+                if (repoTreeState.items) {
+                    const index = repoTreeState.items.findIndex(item => item.path === fromPath);
+                    const moved = { path: targetPath, type: 'file', size: fileMeta.size || 0, sha: fileMeta.sha || '' };
+                    if (index > -1) repoTreeState.items.splice(index, 1, moved);
+                    else repoTreeState.items.push(moved);
+                }
+
+                // 目标目录如果本来在“待创建”队列里，现在已经有内容了，就不再需要占位提交
+                prunePendingResourceFolders();
+                renderResourceTreeFromCache();
+                showToast(`已移动到 ${targetFolder}`);
+            } catch (error) {
+                console.error('移动资源文件失败:', error);
+                showToast(`移动失败: ${error.message}`, true);
+            }
+        }
+
+        // 移除“已有远端内容”的待创建文件夹（它们不再需要 .gitkeep 占位）
+        function prunePendingResourceFolders() {
+            pendingResourceFolders.forEach((meta, path) => {
+                const hasPendingFile = Array.from(pendingResourceFiles.keys()).some(p => p.startsWith(path + '/'));
+                const hasRemoteFile = resourceRemotePaths.some(item => item.type === 'file' && item.path.startsWith(path + '/'));
+                if (!hasPendingFile && hasRemoteFile) pendingResourceFolders.delete(path);
+            });
         }
 
         function renderResourceNode(node, level = 0) {
@@ -1470,6 +1634,11 @@
                     showResourceFolderContextMenu(e, folder.path);
                 });
 
+                // 作为拖拽落点：把资源文件拖到这个文件夹即移动到其下
+                el.addEventListener('dragover', (e) => handleResourceFolderDragOver(e, el, folder.path));
+                el.addEventListener('dragleave', (e) => handleResourceFolderDragLeave(e, el));
+                el.addEventListener('drop', (e) => handleResourceFolderDrop(e, el, folder.path));
+
                 dom.resourceTree.appendChild(el);
                 renderResourceNode(folder, level + 1);
             });
@@ -1481,9 +1650,18 @@
                 el.dataset.parentPath = file.parentPath;
                 el.dataset.fileName = file.name;
                 el.style.paddingLeft = `${level * 16 + 8}px`;
-                el.title = file.pending ? `${file.path}（待提交）` : file.path;
+                el.title = file.pending
+                    ? `${file.path}（待提交，可拖到其他文件夹）`
+                    : `${file.path}（可拖到其他文件夹）`;
                 el.innerHTML = `<i class="fa ${getFileIcon(file.name)}"></i> ${escapeHtml(file.name)}`
                     + (file.pending ? '<span class="pending-badge">待提交</span>' : '');
+
+                // 匿名只读时远端文件不可写，隐藏拖拽能力；待提交文件只是改本队列，随时可拖
+                el.draggable = !!file.pending || !!getGithubToken();
+                if (el.draggable) {
+                    el.addEventListener('dragstart', (e) => startResourceDrag(e, file, el));
+                    el.addEventListener('dragend', () => endResourceDrag());
+                }
 
                 el.addEventListener('dblclick', () => {
                     if (file.pending) {
@@ -3227,6 +3405,31 @@
             // 提交待上传的资源
             dom.resourceCommitBtn.addEventListener('click', async () => {
                 await commitPendingResources();
+            });
+
+            // 拖到资源树的空白处 = 移动到 asserts 根目录（具体项由各自的 dragover/drop 处理）
+            dom.resourceTree.addEventListener('dragover', (e) => {
+                if (!resourceDragState) return;
+                if (e.target.closest('.tree-item')) return;
+                if (!isResourceMoveTargetAllowed(resourceDragState.path, RESOURCE_ROOT)) {
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'not-allowed';
+                    return;
+                }
+                e.preventDefault();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                dom.resourceTree.classList.add('drop-hover');
+            });
+            dom.resourceTree.addEventListener('dragleave', (e) => {
+                if (dom.resourceTree.contains(e.relatedTarget)) return;
+                dom.resourceTree.classList.remove('drop-hover');
+            });
+            dom.resourceTree.addEventListener('drop', (e) => {
+                if (!resourceDragState) return;
+                if (e.target.closest('.tree-item')) return;
+                e.preventDefault();
+                const state = resourceDragState;
+                endResourceDrag();
+                moveResourceFile(state.path, RESOURCE_ROOT);
             });
         }
 

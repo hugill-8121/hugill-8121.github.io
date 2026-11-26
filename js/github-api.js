@@ -282,7 +282,9 @@ async function listRepoPaths(octokit, repoInfo, subPath = '') {
         .map(item => ({
             path: item.path,
             type: item.type === 'tree' ? 'folder' : 'file',
-            size: item.size || 0
+            size: item.size || 0,
+            // 带上 blob sha：移动文件时可直接引用已有 blob，不必下载再上传内容
+            sha: item.sha || ''
         }));
 }
 
@@ -352,6 +354,23 @@ class CommitBatch {
         return this;
     }
 
+    /**
+     * 移动文件：新路径直接引用已有的 blob sha（不下载内容），旧路径标记删除。
+     * 资源移动用这个，任意大小的二进制文件都不会因为 contents 接口的 1MB 限制而失败。
+     * @param {string} fromPath
+     * @param {string} toPath
+     * @param {string} blobSha 源文件在仓库树里的 blob sha
+     * @returns {CommitBatch}
+     */
+    moveRef(fromPath, toPath, blobSha) {
+        if (!blobSha) throw new Error(`缺少 blob sha，无法移动：${fromPath}`);
+        if (fromPath === toPath) return this;
+        this.operations.delete(fromPath);
+        this.operations.set(toPath, { path: toPath, action: 'ref', sha: blobSha });
+        this.operations.set(fromPath, { path: fromPath, action: 'delete' });
+        return this;
+    }
+
     get size() {
         return this.operations.size;
     }
@@ -382,6 +401,11 @@ class CommitBatch {
                 for (const op of this.operations.values()) {
                     if (op.action === 'delete') {
                         treeItems.push({ path: op.path, mode: '100644', type: 'blob', sha: null });
+                        continue;
+                    }
+                    // 移动：直接引用已有 blob，不重复上传内容
+                    if (op.action === 'ref') {
+                        treeItems.push({ path: op.path, mode: '100644', type: 'blob', sha: op.sha });
                         continue;
                     }
                     const { data: blob } = await this.octokit.rest.git.createBlob({

@@ -1066,6 +1066,34 @@ h1 {
     font-weight: 500;
 }
 
+/* 资源拖拽移动：拖起的文件半透明，可作为落点的文件夹高亮 */
+.tree-item.dragging {
+    opacity: 0.45;
+}
+
+.tree-item.drop-hover {
+    background-color: #dbeafe;
+    outline: 1px dashed #3b82f6;
+    outline-offset: -1px;
+}
+
+.resource-tree.drop-hover {
+    background-color: #f8fafc;
+    outline: 1px dashed #93c5fd;
+    outline-offset: -2px;
+}
+
+.resource-drag-hint {
+    padding: 0.35rem 0.5rem 0.5rem 0.5rem;
+    font-size: 0.72rem;
+    color: #9ca3af;
+    line-height: 1.4;
+}
+
+.resource-drag-hint code {
+    color: #6b7280;
+}
+
 .tree-item.folder i {
     color: #f59e0b;
 }
