@@ -1,6 +1,6 @@
 # hugill-8121.github.io
 
-纯静态的 GitHub Pages 单页博客：首页、文章详情、在线写文章、资源管理都集中在 `index.html` 一个页面里完成，所有写操作用 GitHub Token 通过 GitHub API 直接提交回本仓库，不需要任何后端。
+纯静态的 GitHub Pages 单页博客：首页、文章详情、在线写文章、资源管理都在同一个页面（`index.html`）里完成，交互逻辑拆在 `assets/js/app/` 下按领域分文件，所有写操作用 GitHub Token 通过 GitHub API 直接提交回本仓库，不需要任何后端。
 
 - 线上地址：<https://hugill-8121.github.io/>
 - 构建方式：GitHub Pages（源 `main` 分支根目录，`legacy` 构建；根目录的 `index.html` 优先于 Jekyll 主题页）
@@ -18,7 +18,7 @@
 
 ```
 .
-├─ index.html            单页应用（页面结构 + 内联 module 脚本，交互逻辑都在这里）
+├─ index.html            单页应用：只有页面结构 + 一个入口 <script type="module" src="./assets/js/app/main.js">
 ├─ blog-config.json      站点与文章元数据：标题、简介、图标、分类、uuid、路径、tags、hidden
 ├─ _config.yaml          Jekyll 主题配置（仅作为 Pages 兜底）
 ├─ blog/                 文章正文 Markdown（按目录分层）
@@ -29,7 +29,23 @@
 │  └─ js/
 │     ├─ github-api.js   Octokit 封装 + CommitBatch 原子提交 + 文件读取
 │     ├─ blog-config.js  配置读取、base64 解码等工具
-│     └─ blog-utils.js   Markdown 渲染、容器切换等
+│     ├─ blog-utils.js   Markdown 渲染、容器切换等
+│     └─ app/            单页应用的业务模块（入口 main.js）
+│        ├─ main.js           启动编排：读配置、校验登录、渲染首页/详情、绑事件
+│        ├─ state.js          全部共享可变状态（state 对象）与仓库配置 config
+│        ├─ dom.js            DOM 引用表，页面结构改这里
+│        ├─ utils.js          路径编码、localStorage、Token、toast、favicon
+│        ├─ auth.js           登录校验、登录/登出 UI、Token 失效降级匿名
+│        ├─ list.js           首页列表：配置、commit 缓存、标签云、月份、卡片
+│        ├─ show.js           文章详情：定位文章、正文、最新 commit
+│        ├─ editor.js         编辑区：标签页、表单快照/脏标记、标签 chip、分类目录候选
+│        ├─ file-tree.js      左侧文件栏（blog 目录树）
+│        ├─ repo-tree.js      仓库树抓取与缓存（资源栏、文件栏共用）
+│        ├─ resource-tree.js  资源栏视图：树渲染、拖拽移动/重命名、右键菜单、搜索
+│        ├─ resource-queue.js 资源待提交队列：上传/新建/删除登记与一次提交
+│        ├─ events-nav.js     导航、登录菜单、API 限额、时间筛选的事件绑定
+│        ├─ events-editor.js  编辑表单与保存流程的事件绑定
+│        └─ events-resource.js 资源工具条、上传弹窗、拖拽的事件绑定
 ├─ .gitignore            忽略 .git_api
 └─ .git_api              本地保存的 GitHub Token（**不要提交**）
 ```
