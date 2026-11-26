@@ -20,7 +20,6 @@
 .
 ├─ index.html            单页应用：只有页面结构 + 一个入口 <script type="module" src="./assets/js/app/main.js">
 ├─ blog-config.json      站点与文章元数据：标题、简介、图标、分类、uuid、路径、tags、hidden
-├─ _config.yaml          Jekyll 主题配置（仅作为 Pages 兜底）
 ├─ blog/                 文章正文 Markdown（按目录分层）
 ├─ media/                文章引用的图片等资源文件（对应页面右侧资源栏）
 ├─ assets/
