@@ -93,7 +93,7 @@ export const dom = {
     // 资源提交
     resourceCommitBtn: document.getElementById('commit-resources'),
     pendingResourceCount: document.getElementById('pending-resource-count'),
-    // 图床已独立成 host.html，菜单入口是普通链接（见 index.html 的 #open-host-btn）
+    // 图床已独立成 host.html，入口挂在底部个人介绍栏的链接行（见 views/footer.js）
     // 底部个人介绍栏
     siteFooter: document.getElementById('site-footer'),
     footerAvatar: document.getElementById('footer-avatar'),

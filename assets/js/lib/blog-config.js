@@ -36,7 +36,8 @@ export function encodeBase64Utf8(text) {
 }
 
 /**
- * 规范化配置对象：保证 blogs 是对象
+ * 规范化配置对象：保证 blogs 是对象；hidden 缺省即“不隐藏”，
+ * 所以显式的 hidden:false 一律删掉，只在需要隐藏时保留 "hidden": true
  * @param {Object} raw
  * @returns {Object}
  */
@@ -45,6 +46,15 @@ export function normalizeBlogConfig(raw) {
     if (!cfg.blogs || typeof cfg.blogs !== 'object' || Array.isArray(cfg.blogs)) {
         cfg.blogs = {};
     }
+    Object.keys(cfg.blogs).forEach(group => {
+        const list = cfg.blogs[group];
+        if (!Array.isArray(list)) return;
+        list.forEach(entry => {
+            if (entry && typeof entry === 'object' && 'hidden' in entry && !entry.hidden) {
+                delete entry.hidden;
+            }
+        });
+    });
     return cfg;
 }
 
@@ -96,7 +106,7 @@ function assertSegment(value, label) {
  * @param {string} input.path 文件路径（相对仓库根，如 blog/grpc/x.md）
  * @param {string|number} [input.uuid] blog_uuid（编辑时传入原值，新增时传入新生成值）
  * @param {string} [input.description] 描述（不传则沿用旧值 / 新增时取标题）
- * @param {boolean} [input.hidden] 是否在主页卡片中隐藏（不传：新增默认 false；编辑保留原值）
+ * @param {boolean} [input.hidden] 是否在主页卡片中隐藏（不传：新增默认不隐藏；编辑保留原值；只有 true 才写入配置）
  * @param {'create'|'update'} [input.mode='update'] create 时同路径视为冲突并报错
  * @returns {{config: Object, action: 'added'|'updated', group: string, entry: Object}}
  */
@@ -133,7 +143,11 @@ export function upsertBlogEntry(config, input) {
             entry.description = title;
         }
         if (!entry.path) entry.path = path;
-        if (hidden !== undefined) entry.hidden = hidden;
+        if (hidden !== undefined) {
+            // hidden 默认 false：只有要隐藏时才落 "hidden": true，否则删掉该字段
+            if (hidden) entry.hidden = true;
+            else delete entry.hidden;
+        }
         return { config: cfg, action: 'updated', group, entry };
     }
 
@@ -146,9 +160,10 @@ export function upsertBlogEntry(config, input) {
         title,
         description: input.description || title,
         path,
-        tags: tags.length > 0 ? tags : ['未分类'],
-        hidden: !!input.hidden
+        tags: tags.length > 0 ? tags : ['未分类']
     };
+    // 默认不隐藏，只有显式要求隐藏才写 hidden:true
+    if (hidden) entry.hidden = true;
     cfg.blogs[group].push(entry);
     return { config: cfg, action: 'added', group, entry };
 }

@@ -143,7 +143,9 @@ export async function commitPendingVisibility() {
             let found = findBlogEntry(remote.config, { path });
             if (!found && uuid) found = findBlogEntry(remote.config, { uuid });
             if (!found) throw new Error(`配置中找不到文章：${path}`);
-            found.entry.hidden = !!hidden;
+            // hidden 默认 false：只在需要隐藏时写 true，取消隐藏就删掉该字段
+            if (hidden) found.entry.hidden = true;
+            else delete found.entry.hidden;
         });
 
         const configText = serializeBlogConfig(remote.config);

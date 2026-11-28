@@ -117,18 +117,6 @@ header {
     background-color: #f1f5f9;
 }
 
-/* 菜单项里当链接用的条目（例如图床页）：清掉链接默认样式，保持和普通菜单项一致 */
-.menu-link {
-    text-decoration: none;
-    color: inherit;
-}
-
-.menu-link-mark {
-    margin-left: auto;
-    font-size: 10px;
-    color: #9ca3af;
-}
-
 .menu-item.disabled {
     color: #9ca3af;
     cursor: not-allowed;

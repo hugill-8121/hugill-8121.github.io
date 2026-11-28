@@ -6,6 +6,8 @@
 //   bio       一句话简介（纯文本，自动断行）
 //   links     [{ label, url, icon }]，icon 用 Font Awesome 类名（如 fa-github）
 //   note      底部小字，支持 {year} 占位（如 "© {year} hugill"）
+//
+// 链接行末尾固定追加一个内置的“图床”入口（host.html），配置里的 links 只管外链。
 
 import { dom } from '../core/dom.js';
 import { state } from '../core/state.js';
@@ -43,6 +45,23 @@ function buildLink(item) {
     a.appendChild(icon);
     const span = document.createElement('span');
     span.textContent = label;
+    a.appendChild(span);
+    return a;
+}
+
+// 内置入口：图床独立页 host.html（与 index.html 同级，用相对路径，本地和 Pages 都能跳）
+function buildHostLink() {
+    const a = document.createElement('a');
+    a.className = 'footer-link';
+    a.href = 'host.html';
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.title = '图床：把仓库 media/ 当作图床，上传即得对外直链（新窗口打开）';
+    const icon = document.createElement('i');
+    icon.className = 'fa fa-picture-o';
+    a.appendChild(icon);
+    const span = document.createElement('span');
+    span.textContent = '图床';
     a.appendChild(span);
     return a;
 }
@@ -87,6 +106,8 @@ export function renderSiteFooter() {
         const node = buildLink(item);
         if (node) dom.footerLinks.appendChild(node);
     });
+    // 图床入口固定挂在链接行末尾，不依赖 blog-config.json
+    dom.footerLinks.appendChild(buildHostLink());
     dom.footerLinks.style.display = dom.footerLinks.childElementCount ? 'flex' : 'none';
 
     const note = String(profile.note || '').trim().replace(/\{year\}/g, String(new Date().getFullYear()));
